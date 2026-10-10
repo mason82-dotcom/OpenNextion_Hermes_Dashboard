@@ -2,7 +2,7 @@
 
 **Hermes Touch** – ESP32-S3 Touchscreen für den vorhandenen Hermes-Agent auf dem Raspberry Pi 5.
 
-**Stand: v0.2 – Status-MVP.** Quellcode im Repository; Bridge-Tests laufen automatisiert. Hardware-Build und Installation auf dem Pi sind noch **nicht** nachgewiesen.
+**Stand: v0.3 – Status-MVP.** Quellcode im Repository; Der Anwender hat die Status-Bridge und den Hermes-API-Healthcheck auf seinem Pi erfolgreich getestet. Neue v0.3-Änderungen und der Firmware-Build sind noch **nicht** auf Hardware bestätigt.
 
 ## Architektur
 
@@ -13,7 +13,7 @@ ONX3248G035 (ESP32-S3 / LVGL)
 Pi 5: Hermes-Touch-Bridge (:8765)
     ├── Linux-Systemdaten (/proc, /sys) – nur lesen
     ├── Hermes API /health (localhost:8642) – nur lesen
-    └── Dashboard /api/status (localhost:9119) – nur lesen
+    └── Dashboard /api/status und /api/health (localhost:9119) – nur lesen
         [bestehender Hermes-Agent bleibt unverändert]
 ```
 
@@ -26,6 +26,7 @@ cd ~/Projekte
 git clone https://github.com/mason82-dotcom/OpenNextion_Hermes_Dashboard.git
 cd OpenNextion_Hermes_Dashboard
 bash scripts/pi/doctor.sh
+python3 scripts/pi/diagnose-dashboard.py  # zeigt keine Antwortinhalte oder Schlüssel
 python3 -m unittest discover -s tests -v
 bash scripts/pi/create-local-config.sh
 bash scripts/pi/run-local.sh
@@ -61,7 +62,8 @@ Siehe [docs/PI-SETUP.md](docs/PI-SETUP.md). Die Dateien können auf dem Pi per `
 ## Geplante Ausbaustufen
 
 - v0.1–0.2: Statusanzeige, Hermes-API- und Dashboard-Healthchecks, sichere lokale Grundkonfiguration, Tests
-- v0.2: realer Firmware-Build, LVGL-Touchtest und WLAN-Verbindung
+- v0.3: Diagnosecodes, Fallback-Healthcheck und Hintergrundabfragen; Systemstatus-Anfragen warten nicht auf das Dashboard
+- Nächster Schritt: realer Firmware-Build, LVGL-Touchtest und WLAN-Verbindung
 - v0.3: gesicherter Device-to-Pi-Transport, Gateway- und Task-Status
 - v0.4: kontrollierter Chat über Hermes-API mit separater Freigabe
 - v0.5: Mikrofon/Lautsprecher und optionaler Sprachdialog
