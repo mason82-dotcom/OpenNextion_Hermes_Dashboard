@@ -59,7 +59,7 @@ bash "$ROOT/scripts/pi/tls-smoke.sh" ||
   { printf 'REFUSED: TLS smoke test failed; leave working offline firmware untouched.\n' >&2; exit 3; }
 printf '\nWARNING: this replaces the working offline firmware on the selected board.\n'
 printf 'Do not continue unless you physically confirmed this serial device is the OpenNextion.\n'
-printf 'The connected image embeds WiFi credentials and a read-only Bridge token.\n'
+printf 'The connected image embeds WiFi credentials and a read-only HTTPS device token.\n'
 printf 'To authorize, type exactly: FLASH-HERMES-TLS\n'
 if [[ ! -t 0 ]]; then
   printf 'REFUSED: interactive terminal required.\n' >&2
