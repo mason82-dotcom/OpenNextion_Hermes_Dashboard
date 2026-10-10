@@ -37,7 +37,8 @@ if arduino-cli compile \
     "$SKETCH" 2>&1 | tee "$LOG"; then
   printf '\nSUCCESS: clean offline firmware compile completed.\n'
   printf 'Binary artifacts:\n'
-  find "$BUILD" -maxdepth 2 -type f \\( -name '*.bin' -o -name '*.elf' \\) -printf '%p (%s bytes)\\n'
+  find "$BUILD" -maxdepth 2 -type f -name '*.bin' -print
+  find "$BUILD" -maxdepth 2 -type f -name '*.elf' -print
   printf 'NOTHING FLASHED.\n'
 else
   printf '\nBUILD FAILED. No firmware uploaded.\n' >&2
