@@ -10,6 +10,8 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import socket
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -56,15 +58,64 @@ def system_snapshot():
 
 
 def dashboard_probe():
-    # A reachable dashboard does not prove the Hermes gateway is healthy.
+    """Bounded, read-only dashboard check with diagnostic reason codes."""
+    result = {
+        "dashboard_reachable": False,
+        "dashboard_status_available": False,
+        "dashboard_reason": "pending",
+        "dashboard_http_status": None,
+        "gateway_running": None,
+        "version": None,
+    }
     try:
-        with urlopen(Request(DASHBOARD_URL + "/api/status",
-                             headers={"Accept": "application/json"}), timeout=1.0) as r:
-            data = json.load(r)
-            return {"dashboard_reachable": isinstance(data, dict),
-                    "version": str(data.get("version", ""))[:80] if isinstance(data, dict) else None}
-    except (URLError, HTTPError, TimeoutError, ValueError, OSError):
-        return {"dashboard_reachable": False, "version": None}
+        req = Request(DASHBOARD_URL + "/api/status", headers={"Accept": "application/json"})
+        with urlopen(req, timeout=3.0) as response:
+            result["dashboard_reachable"] = True
+            result["dashboard_http_status"] = response.status
+            body = response.read(65537)
+            if len(body) > 65536:
+                result["dashboard_reason"] = "response_too_large"
+            else:
+                try:
+                    data = json.loads(body)
+                    if isinstance(data, dict):
+                        result["dashboard_status_available"] = True
+                        result["dashboard_reason"] = "ok"
+                        version = data.get("version")
+                        result["version"] = str(version)[:80] if version is not None else None
+                        gateway = data.get("gateway_running")
+                        result["gateway_running"] = gateway if isinstance(gateway, bool) else None
+                    else:
+                        result["dashboard_reason"] = "unexpected_json"
+                except (ValueError, UnicodeDecodeError):
+                    result["dashboard_reason"] = "invalid_json"
+    except HTTPError as exc:
+        result["dashboard_reachable"] = True
+        result["dashboard_reason"] = f"http_{exc.code}"
+        result["dashboard_http_status"] = exc.code
+    except (TimeoutError, socket.timeout):
+        result["dashboard_reason"] = "timeout"
+    except URLError as exc:
+        result["dashboard_reason"] = (
+            "timeout" if isinstance(exc.reason, (TimeoutError, socket.timeout))
+            else "connection_error"
+        )
+    except OSError:
+        result["dashboard_reason"] = "connection_error"
+
+    # The lightweight public /api/health can still confirm HTTP reachability
+    # if /api/status is slow or unavailable.
+    if not result["dashboard_reachable"]:
+        try:
+            req = Request(DASHBOARD_URL + "/api/health",
+                          headers={"Accept": "application/json"})
+            with urlopen(req, timeout=1.5) as response:
+                result["dashboard_reachable"] = 200 <= response.status < 300
+        except HTTPError:
+            result["dashboard_reachable"] = True
+        except (URLError, TimeoutError, socket.timeout, OSError):
+            pass
+    return result
 
 
 def api_health_probe():
@@ -82,18 +133,53 @@ def api_health_probe():
         return {"api_reachable": False, "api_healthy": False}
 
 
+# Hermes dashboard status may take seconds; never block ESP32 HTTP requests.
+_probe_lock = threading.Lock()
+_probe_data = {
+    "dashboard_reachable": False,
+    "dashboard_status_available": False,
+    "dashboard_reason": "pending",
+    "dashboard_http_status": None,
+    "gateway_running": None,
+    "version": None,
+    "api_reachable": False,
+    "api_healthy": False,
+}
+
+
+def health_snapshot():
+    with _probe_lock:
+        return dict(_probe_data)
+
+
+def probe_cycle():
+    data = {**dashboard_probe(), **api_health_probe()}
+    with _probe_lock:
+        _probe_data.update(data)
+
+
+def probe_worker(stop_event):
+    while not stop_event.is_set():
+        try:
+            probe_cycle()
+        except Exception:
+            pass  # Next cycle retries; never leak upstream exception details.
+        if stop_event.wait(15):
+            break
+
+
 def status_payload():
     return {
         "ok": True,
         "schema_version": 1,
         "system": system_snapshot(),
-        "hermes": {**dashboard_probe(), **api_health_probe()},
+        "hermes": health_snapshot(),
         "chat": {"enabled": False},
     }
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "HermesTouch/0.1"
+    server_version = "HermesTouch/0.3"
 
     def log_message(self, fmt, *args):
         # Standard request log omits headers and secrets.
@@ -134,12 +220,17 @@ def main():
     if HOST not in ("127.0.0.1", "localhost", "::1"):
         print("WARNING: HTTP transmits your token unencrypted. Use only trusted isolated LAN.")
     server = ThreadingHTTPServer((HOST, PORT), Handler)
+    stop_event = threading.Event()
+    worker = threading.Thread(target=probe_worker, args=(stop_event,), daemon=True)
+    worker.start()
     print(f"Hermes Touch: http://{HOST}:{PORT} (READ-ONLY)", flush=True)
     try:
         server.serve_forever(poll_interval=0.3)
     except KeyboardInterrupt:
         pass
     finally:
+        stop_event.set()
+        worker.join(timeout=2)
         server.server_close()
 
 
