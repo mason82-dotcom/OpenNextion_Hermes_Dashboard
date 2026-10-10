@@ -10,7 +10,7 @@ ESP32 ONX3248G035
   └─ WLAN → HTTPS/TLS auf Pi-LAN-IP:8766
        - CA-Zertifikat auf dem ESP32 fest hinterlegt
        - Serverzertifikat mit IP-SAN, Zeit- und Kettenprüfung
-       - separater Token mit nur GET-/v1/status-Berechtigung
+       - separater HTTPS-Geräte-Token (abweichend vom Bridge-Token), nur GET-/v1/status-Berechtigung
            ↓
 Pi: TLS-only Statusdienst (nur private LAN-Adresse)
            ↓ GET /v1/status
@@ -22,7 +22,7 @@ Hermes API /health, Dashboard /api/status, Pi /proc + /sys
 **Kein unverschlüsselter HTTP-Zugang über das Netzwerk.** 
 Der bestehende lokale Port **8765** bleibt Loopback-only.
 Der TLS-Dienst erlaubt ausschließlich `GET /v1/status`; POST/PUT/PATCH/DELETE werden abgewiesen.
-Die Firmware besitzt keinen Chat-Versand und keinen Hermes-API-Schlüssel.
+Die Firmware besitzt keinen Chat-Versand und keinen Hermes-API-Schlüssel. Sie erhält auch **nicht** den lokalen Bridge-Token: Ab v0.6 wird ein unabhängiger Geräte-Token in `config/tls.env` erzeugt.
 Der Geräte-Token steckt später im Flash des ESP32 – das Gerät sollte deshalb nicht für Dritte zugänglich sein.
 
 **Kein Router-Portforwarding**, kein Internetzugriff auf 8766; ausschließlich eigenes vertrauenswürdiges LAN/WLAN. Möglichst eine Host-Firewall auf den ESP32 einschränken. Bei kompromittiertem Gerät Token erneuern, vgl. unten.
@@ -55,9 +55,26 @@ bash scripts/pi/export-ca-header.sh
 ```
 
 **Die Beispiel-IP durch die echte Pi-IP ersetzen.**
-Die lokale Zertifizierungsstelle und der für diese IP signierte Server-Schlüssel werden in `config/pki/` erstellt. Die Zertifikatsgültigkeit beträgt 365 Tage (Server) und 1095 Tage (CA). Das Skript verweigert Überschreibungen. Bei IP-Wechsel oder Ablauf wird eine geplante Rotation mit anschließender Neuauslieferung des CA-Zertifikats erforderlich.
+Die lokale Zertifizierungsstelle und der für diese IP signierte Server-Schlüssel werden in `config/pki/` erstellt. Für neue Installationen wird auch ein separater HTTPS-Geräte-Token angelegt. Die Zertifikatsgültigkeit beträgt 365 Tage (Server) und 1095 Tage (CA). Das Skript verweigert Überschreibungen. Bei IP-Wechsel oder Ablauf wird eine geplante Rotation mit anschließender Neuauslieferung des CA-Zertifikats erforderlich.
 
 **Wichtig:** `config/pki/ca.key` und `config/pki/server.key` sind PRIVATE; `config/pki/ca.crt` ist öffentlich und wird über `export-ca-header.sh` nach `firmware/HermesTouch/LocalCa.h` kopiert. `LocalCa.h`, `Config.h`, `config/pki/` und `config/tls.env` sind in `.gitignore` ausgeschlossen. Privatdateien nicht posten, nicht nach GitHub committen.
+
+## Bestehende Installation von v0.6 aktualisieren (bereits Zertifikate erstellt)
+
+**Nur falls `config/tls.env` und `config/pki/` bereits vorhanden sind**, wie bei der ersten Inbetriebnahme auf dem Pi `192.168.178.63`:
+
+```bash
+cd ~/Projekte/OpenNextion_Hermes_Dashboard
+git pull --ff-only
+python3 -m unittest discover -s tests -v
+bash scripts/pi/create-device-token.sh
+```
+
+Das Skript ergänzt **nur** einen neuen `HERMES_TOUCH_DEVICE_TOKEN` in der vorhandenen lokalen `config/tls.env`, falls er fehlt. Es zeigt den Wert nicht an und verändert **weder** das Zertifikat **noch** `config/bridge.env`. Wiederholte Aufrufe erhalten den bereits existierenden Wert.
+
+Anschließend den **TLS-Prozess auf Port 8766 mit Strg+C** beenden und per `bash scripts/pi/run-tls.sh` neu starten, damit er das neue Token lädt. Die HTTP-Bridge auf `127.0.0.1:8765` bleibt unverändert. Danach `bash scripts/pi/tls-smoke.sh` ausführen.
+
+**Wichtig:** Der TLS-Smoke-Test verwendet ab jetzt den neuen Geräte-Token. Ein bereits laufender alter HTTPS-Prozess kann daher bis zum Neustart HTTP 401 zurückgeben; dies bedeutet keinen Zertifikatsfehler.
 
 ## 4. TLS-Dienst starten und getrennt prüfen
 
@@ -117,11 +134,11 @@ python3 scripts/pi/configure-device.py
 bash scripts/pi/firmware-build-connected.sh
 ```
 
-Die Konfiguration fragt WLAN-SSID und WLAN-Passwort interaktiv ab (Passwort ohne Echo), übernimmt den vorhandenen eingeschränkt nutzbaren Bridge-Token lokal und erzeugt die ignorierte `Config.h`. Die CA-Kette wird aus `LocalCa.h` verwendet.
+Die Konfiguration fragt WLAN-SSID und WLAN-Passwort interaktiv ab (Passwort ohne Echo), übernimmt den unabhängigen HTTPS-Geräte-Token aus der lokalen `config/tls.env` und erzeugt die ignorierte `Config.h`. Die CA-Kette wird aus `LocalCa.h` verwendet.
 
 Der ESP32 verlangt eine `https://`-URL, ein echtes CA-Zertifikat und synchronisierte UTC-Zeit (NTP über `pool.ntp.org` oder `time.google.com`). Er **fällt nicht auf HTTP** oder `setInsecure()` zurück. Hat er keinen NTP-Zugang, wird die HTTPS-Abfrage aus Sicherheitsgründen verweigert.
 
-Der Build mit `firmware-build-connected.sh` enthält WLAN-Passwort und Geräte-Token **im Binärimage**. Deshalb wird er unter `build/firmware-connected/` lokal und mit beschränkten Rechten erzeugt. Kein automatisches Flashen.
+Der Build mit `firmware-build-connected.sh` enthält WLAN-Passwort und **HTTPS-Geräte-Token** **im Binärimage**. Deshalb wird er unter `build/firmware-connected/` lokal und mit beschränkten Rechten erzeugt. Kein automatisches Flashen.
 
 **Erst nach erfolgreicher Prüfung** des TLS-Smoketests, der verbundenen Kompilierung und des USB-Geräts folgt ein separat bestätigter Firmware-Upload. Der bis dahin funktionierende Offline-Firmwarestand bleibt erhalten.
 
