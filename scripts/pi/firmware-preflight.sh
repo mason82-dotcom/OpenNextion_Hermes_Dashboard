@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Read-only preflight for compiling ONX3248G035 firmware on Raspberry Pi 5.
 set -euo pipefail
+# Discover user-installed Arduino CLI without changing shell dotfiles.
+export PATH="$HOME/.local/bin:$PATH"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 printf '\n=== Hermes Touch / Firmware preflight (read-only) ===\n'
 printf 'Host: '; hostname
