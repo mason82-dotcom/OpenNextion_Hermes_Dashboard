@@ -1,0 +1,13 @@
+# Never commit local credentials
+config/bridge.env
+firmware/HermesTouch/Config.h
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.vscode/
+.idea/
+build/
+.pio/
+.DS_Store

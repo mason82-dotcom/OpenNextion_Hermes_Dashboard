@@ -1,0 +1,7 @@
+#pragma once
+// Create Config.h in this directory. Do not commit it.
+// Use only the Hermes TOUCH bridge token, never the Hermes API key.
+#define HT_WIFI_SSID "YOUR_2G4_WIFI_SSID"
+#define HT_WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+#define HT_BRIDGE_URL "http://192.168.1.50:8765"
+#define HT_DEVICE_TOKEN "PASTE_YOUR_LOCAL_BRIDGE_TOKEN_HERE"
