@@ -40,6 +40,7 @@ jobs:
         run: |
           test ! -f firmware/HermesTouch/Config.h
           arduino-cli compile \
+            --clean \
             --fqbn 'esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB' \
             --build-path "${{ runner.temp }}/hermes-display-demo" \
             firmware/HermesTouch
@@ -51,6 +52,7 @@ jobs:
           cp firmware/HermesTouch/Config.h.example firmware/HermesTouch/Config.h
           trap 'rm -f firmware/HermesTouch/Config.h' EXIT
           arduino-cli compile \
+            --clean \
             --fqbn 'esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB' \
             --build-path "${{ runner.temp }}/hermes-connected-build" \
             firmware/HermesTouch
