@@ -5,7 +5,7 @@
  * No chat actions, no OTA, no Hermes agent configuration writes.
  */
 #include <Arduino.h>
-#include <math.h>
+#include <cmath>
 #include <stdio.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -396,7 +396,7 @@ static void pushHistory(int32_t sample) {
 // then pass the completed text to LVGL via its supported %s conversion.
 static void decimalText(char *out, size_t cap, float value, uint8_t digits) {
   if (cap == 0) return;
-  if (!isfinite(value) || fabsf(value) > 10000.0f ||
+  if (!std::isfinite(value) || fabsf(value) > 10000.0f ||
       (digits != 1 && digits != 2)) {
     snprintf(out, cap, "--");
     return;
