@@ -1,0 +1,116 @@
+# Hermes Touch v0.6: sichere Pi-Livedaten über HTTPS/TLS
+
+**Implementiert, aber noch nicht auf dem Raspberry Pi oder ESP32 getestet.**
+Die v0.5-Offlinedemo ist auf echter OpenNextion-Hardware bestätigt.
+
+## Architektur / Sicherheitsgrenzen
+
+```text
+ESP32 ONX3248G035
+  └─ WLAN → HTTPS/TLS auf Pi-LAN-IP:8766
+       - CA-Zertifikat auf dem ESP32 fest hinterlegt
+       - Serverzertifikat mit IP-SAN, Zeit- und Kettenprüfung
+       - separater Token mit nur GET-/v1/status-Berechtigung
+           ↓
+Pi: TLS-only Statusdienst (nur private LAN-Adresse)
+           ↓ GET /v1/status
+Pi: bestehende HTTP-Bridge (127.0.0.1:8765)
+           ↓ read-only
+Hermes API /health, Dashboard /api/status, Pi /proc + /sys
+```
+
+**Kein unverschlüsselter HTTP-Zugang über das Netzwerk.** 
+Der bestehende lokale Port **8765** bleibt Loopback-only.
+Der TLS-Dienst erlaubt ausschließlich `GET /v1/status`; POST/PUT/PATCH/DELETE werden abgewiesen.
+Die Firmware besitzt keinen Chat-Versand und keinen Hermes-API-Schlüssel.
+Der Geräte-Token steckt später im Flash des ESP32 – das Gerät sollte deshalb nicht für Dritte zugänglich sein.
+
+**Kein Router-Portforwarding**, kein Internetzugriff auf 8766; ausschließlich eigenes vertrauenswürdiges LAN/WLAN. Möglichst eine Host-Firewall auf den ESP32 einschränken. Bei kompromittiertem Gerät Token erneuern, vgl. unten.
+
+## 1. Pi: Repository aktualisieren und vorhandene Bridge prüfen
+
+```bash
+cd ~/Projekte/OpenNextion_Hermes_Dashboard
+git status --short
+git pull --ff-only
+python3 -m unittest discover -s tests -v
+bash scripts/pi/smoke-status.sh
+```
+
+Die bestehende Bridge muss im eigenen Terminal mit `bash scripts/pi/run-local.sh` laufen. Sie muss **weiterhin ausschließlich an 127.0.0.1:8765** binden.
+
+## 2. Die korrekte LAN-IP des Pi bestimmen
+
+```bash
+ip -4 -br addr show scope global
+```
+
+Wähle die IPv4-Adresse des Pi im gleichen LAN/WLAN wie der ESP32, z. B. `192.168.178.42`. Nicht einfach eine Docker- oder Tunnel-IP übernehmen. Die Adresse muss dauerhaft erreichbar bleiben; ggf. DHCP-Reservierung im Router setzen.
+
+## 3. CA und Serverzertifikat EINMAL erstellen
+
+```bash
+bash scripts/pi/tls-create-cert.sh 192.168.178.42
+bash scripts/pi/export-ca-header.sh
+```
+
+**Die Beispiel-IP durch die echte Pi-IP ersetzen.**
+Die lokale Zertifizierungsstelle und der für diese IP signierte Server-Schlüssel werden in `config/pki/` erstellt. Die Zertifikatsgültigkeit beträgt 365 Tage (Server) und 1095 Tage (CA). Das Skript verweigert Überschreibungen. Bei IP-Wechsel oder Ablauf wird eine geplante Rotation mit anschließender Neuauslieferung des CA-Zertifikats erforderlich.
+
+**Wichtig:** `config/pki/ca.key` und `config/pki/server.key` sind PRIVATE; `config/pki/ca.crt` ist öffentlich und wird über `export-ca-header.sh` nach `firmware/HermesTouch/LocalCa.h` kopiert. `LocalCa.h`, `Config.h`, `config/pki/` und `config/tls.env` sind in `.gitignore` ausgeschlossen. Privatdateien nicht posten, nicht nach GitHub committen.
+
+## 4. TLS-Dienst starten und getrennt prüfen
+
+**Terminal A:** bereits laufende Read-only-Bridge auf 127.0.0.1:8765 behalten.
+
+**Terminal B:**
+
+```bash
+cd ~/Projekte/OpenNextion_Hermes_Dashboard
+bash scripts/pi/run-tls.sh
+```
+
+Erwartet: `https://<PI-IP>:8766/v1/status (GET ONLY)`.
+
+**Terminal C:**
+
+```bash
+cd ~/Projekte/OpenNextion_Hermes_Dashboard
+bash scripts/pi/tls-smoke.sh
+```
+
+Erwartet: `TLS verified against locally generated CA: YES`, `Bridge JSON status: ok`, Hermes- und Systemwerte.
+
+Falls die Bindung fehlschlägt, zunächst `ip -4 -br addr show scope global` und die IP-Einstellung in der ignorierten `config/tls.env` prüfen. Kein Wechsel auf `0.0.0.0` und kein Deaktivieren der TLS-Prüfung. Der TLS-Dienst wird nicht automatisch als systemd-Dienst installiert.
+
+## 5. Verbindungs-Firmware erst nach bestandenem TLS-Test vorbereiten
+
+```bash
+python3 scripts/pi/configure-device.py
+bash scripts/pi/firmware-build-connected.sh
+```
+
+Die Konfiguration fragt WLAN-SSID und WLAN-Passwort interaktiv ab (Passwort ohne Echo), übernimmt den vorhandenen eingeschränkt nutzbaren Bridge-Token lokal und erzeugt die ignorierte `Config.h`. Die CA-Kette wird aus `LocalCa.h` verwendet.
+
+Der ESP32 verlangt eine `https://`-URL, ein echtes CA-Zertifikat und synchronisierte UTC-Zeit (NTP über `pool.ntp.org` oder `time.google.com`). Er **fällt nicht auf HTTP** oder `setInsecure()` zurück. Hat er keinen NTP-Zugang, wird die HTTPS-Abfrage aus Sicherheitsgründen verweigert.
+
+Der Build mit `firmware-build-connected.sh` enthält WLAN-Passwort und Geräte-Token **im Binärimage**. Deshalb wird er unter `build/firmware-connected/` lokal und mit beschränkten Rechten erzeugt. Kein automatisches Flashen.
+
+**Erst nach erfolgreicher Prüfung** des TLS-Smoketests, der verbundenen Kompilierung und des USB-Geräts erfolgt ein separat bestätigter Firmware-Upload; dafür wird die bestehende funktionierende Offline-Firmware absichtlich nicht überschrieben.
+
+## 6. Beobachtungen nach dem späteren Flash
+
+Auf **STATUS** werden Pi-CPU-Temperatur, Pi-RAM, Systemlast und Hermes-API-Status aus der Bridge dargestellt. Im Tab **GRAPH** erscheint der echte Temperaturverlauf des Pi (maximal 24 Messpunkte). **SYSTEM** zeigt weiterhin lokale ESP32-Hardwaredaten. **CHAT** bleibt gesperrt.
+
+Eine fehlgeschlagene Zertifikatsprüfung, fehlende Netzwerkverbindung, fehlender NTP-Sync oder ungültiges Token muss zu **keinen aktuellen Pi-Daten** führen, nicht zu erfundenen Werten.
+
+## Fehlerdiagnose und Grenzen
+
+- **TLS-Verbindung scheitert:** Datum/Uhrzeit auf ESP32, Cert-SAN/IP, CA-Header, Pi-LAN-Bindung und Firewall prüfen.
+- **HTTP 401:** Gerätetoken stimmt nicht mit `config/bridge.env` überein.
+- **HTTP 503:** lokaler Bridge-Prozess unter 127.0.0.1:8765 läuft nicht.
+- **Zeitanzeige/NTP ausstehend:** DNS/UDP-123 für ESP32 prüfen; nicht `setInsecure()` aktivieren.
+- **HTTP im Config.h:** absichtlich abgelehnt.
+- **Hohe Latenz:** verbundener ESP32-Code fragt synchron innerhalb des LVGL-Loops ab; bei Verbindungsproblemen kann die Oberfläche vorübergehend stocken. Hintergrundtask ist für einen Folgeschritt vorgesehen.
+
+**Hinweis:** Die TLS-Projekttests prüfen die Server-Autorisierung und das Python-Zertifikats-Handling. Ein erfolgreicher Build garantiert nicht, dass die ESP32/mbedTLS-Verifikation auf realer Hardware funktioniert. Diese ist separat nachzuweisen.
