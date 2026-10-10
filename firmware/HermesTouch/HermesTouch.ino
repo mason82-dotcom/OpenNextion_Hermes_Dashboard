@@ -1,4 +1,4 @@
-/* Hermes Touch 0.1. Read-only status UI for OpenNextion ONX3248G035.
+/* Hermes Touch 0.2. Read-only status UI for OpenNextion ONX3248G035.
  * Board bring-up based on official OpenNextion Arduino 09_outofbox_demo.
  * No OTA, no Hermes commands, no chat enablement.
  */
@@ -31,6 +31,7 @@ static lv_disp_drv_t dispDrv;
 static lv_color_t dispBuf[LCD_H_RES * LVGL_BUF_LINES];
 static lv_obj_t *infoLabel;
 static lv_obj_t *hermesLabel;
+static lv_obj_t *apiLabel;
 static lv_obj_t *tempLabel;
 static lv_obj_t *ramLabel;
 static lv_obj_t *loadLabel;
@@ -95,10 +96,11 @@ static void buildUi() {
   lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x101827), 0);
   lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
-  makeLabel(scr, "HERMES TOUCH  |  0.1", 14, 15, 0x88caff);
+  makeLabel(scr, "HERMES TOUCH  |  0.2", 14, 15, 0x88caff);
   makeLabel(scr, "RASPBERRY PI 5  /  LIVE STATUS", 14, 64, 0x9fb2c8);
   infoLabel = makeLabel(scr, "WLAN verbindet ...", 14, 105, 0xffffff);
   hermesLabel = makeLabel(scr, "Hermes-Dashboard: unbekannt", 14, 158, 0x86d9b6);
+  apiLabel = makeLabel(scr, "Hermes-API: unbekannt", 14, 201, 0x86d9b6);
   tempLabel = makeLabel(scr, "CPU-Temperatur: --", 14, 236, 0xffffff);
   ramLabel = makeLabel(scr, "RAM-Belegung: --", 14, 286, 0xffffff);
   loadLabel = makeLabel(scr, "Systemlast: --", 14, 336, 0xffffff);
@@ -116,6 +118,7 @@ static void statusRefresh() {
   if (WiFi.status() != WL_CONNECTED) {
     lv_label_set_text(infoLabel, "WLAN: getrennt");
     lv_label_set_text(hermesLabel, "Bridge nicht erreichbar");
+    lv_label_set_text(apiLabel, "Hermes-API: unbekannt");
     lv_label_set_text(tempLabel, "CPU-Temperatur: --");
     lv_label_set_text(ramLabel, "RAM-Belegung: --");
     lv_label_set_text(loadLabel, "Systemlast: --");
@@ -136,14 +139,18 @@ static void statusRefresh() {
   lv_label_set_text_fmt(infoLabel, "WLAN: %s", WiFi.localIP().toString().c_str());
   if (code != 200) {
     lv_label_set_text_fmt(hermesLabel, "Bridge HTTP: %d", code);
+    lv_label_set_text(apiLabel, "Hermes-API: unbekannt");
     return;
   }
   JsonDocument doc;
   if (deserializeJson(doc, body)) {
     lv_label_set_text(hermesLabel, "Bridge: ungueltiges JSON");
+    lv_label_set_text(apiLabel, "Hermes-API: unbekannt");
     return;
   }
   bool dashboard = doc["hermes"]["dashboard_reachable"] | false;
+  bool apiHealthy = doc["hermes"]["api_healthy"] | false;
+  lv_label_set_text(apiLabel, apiHealthy ? "Hermes-API: gesund" : "Hermes-API: nicht erreichbar");
   lv_label_set_text(hermesLabel, dashboard ? "Hermes-Dashboard: erreichbar" :
                                       "Dashboard: offline / unbekannt");
   JsonVariant t = doc["system"]["cpu_temp_c"];
