@@ -1,4 +1,4 @@
-/* Hermes Touch 0.2. Read-only status UI for OpenNextion ONX3248G035.
+/* Hermes Touch 0.4. Read-only status UI for OpenNextion ONX3248G035.
  * Board bring-up based on official OpenNextion Arduino 09_outofbox_demo.
  * No OTA, no Hermes commands, no chat enablement.
  */
@@ -14,7 +14,30 @@
 #define LV_CONF_SKIP
 #include <lvgl.h>
 #include "BoardConfig.h"
+// No Config.h: safe offline display/touch demo, with no WiFi or API traffic.
+// For connected mode copy Config.h.example to Config.h and supply credentials.
+#if __has_include("Config.h")
 #include "Config.h"
+#else
+#define HT_DEMO_MODE 1
+#endif
+#ifndef HT_DEMO_MODE
+#define HT_DEMO_MODE 0
+#endif
+#if !HT_DEMO_MODE
+#ifndef HT_WIFI_SSID
+#error "Config.h must define HT_WIFI_SSID"
+#endif
+#ifndef HT_WIFI_PASSWORD
+#error "Config.h must define HT_WIFI_PASSWORD"
+#endif
+#ifndef HT_BRIDGE_URL
+#error "Config.h must define HT_BRIDGE_URL"
+#endif
+#ifndef HT_DEVICE_TOKEN
+#error "Config.h must define HT_DEVICE_TOKEN"
+#endif
+#endif
 
 static constexpr uint32_t STATUS_INTERVAL_MS = 5000;
 static constexpr uint32_t WIFI_RETRY_MS = 15000;
@@ -38,6 +61,7 @@ static lv_obj_t *loadLabel;
 static uint32_t lastRefresh = 0;
 static uint32_t lastWifiAttempt = 0;
 static bool refreshRequested = false;
+static uint32_t refreshTapCount = 0;
 
 static void panelReset() {
   if (!expander.begin(PCF8574_ADDR, &Wire)) {
@@ -88,7 +112,10 @@ static lv_obj_t *makeLabel(lv_obj_t *parent, const char *text, int x, int y, uin
 }
 
 static void requestRefresh(lv_event_t *event) {
-  if (lv_event_get_code(event) == LV_EVENT_CLICKED) refreshRequested = true;
+  if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+    refreshRequested = true;
+    refreshTapCount++;
+  }
 }
 
 static void buildUi() {
@@ -96,7 +123,11 @@ static void buildUi() {
   lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x101827), 0);
   lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
-  makeLabel(scr, "HERMES TOUCH  |  0.2", 14, 15, 0x88caff);
+#if HT_DEMO_MODE
+  makeLabel(scr, "HERMES TOUCH  |  TEST", 14, 15, 0x88caff);
+#else
+  makeLabel(scr, "HERMES TOUCH  |  0.4", 14, 15, 0x88caff);
+#endif
   makeLabel(scr, "RASPBERRY PI 5  /  LIVE STATUS", 14, 64, 0x9fb2c8);
   infoLabel = makeLabel(scr, "WLAN verbindet ...", 14, 105, 0xffffff);
   hermesLabel = makeLabel(scr, "Hermes-Dashboard: unbekannt", 14, 158, 0x86d9b6);
@@ -111,10 +142,23 @@ static void buildUi() {
   lv_obj_t *refreshText = lv_label_create(refreshBtn);
   lv_label_set_text(refreshText, "Aktualisieren");
   lv_obj_center(refreshText);
+#if HT_DEMO_MODE
+  makeLabel(scr, "OFFLINE-TEST  /  KEIN WLAN", 14, 437, 0x9fb2c8);
+#else
   makeLabel(scr, "STATUS-MODUS  /  CHAT GESPERRT", 14, 437, 0x9fb2c8);
+#endif
 }
 
 static void statusRefresh() {
+#if HT_DEMO_MODE
+  lv_label_set_text(infoLabel, "DEMO: WLAN deaktiviert");
+  lv_label_set_text(hermesLabel,
+                    refreshTapCount > 0 ? "TOUCH: Eingabe erkannt" : "TOUCH: Button betaetigen");
+  lv_label_set_text(apiLabel, "LVGL: aktiv");
+  lv_label_set_text_fmt(tempLabel, "PSRAM: %lu KB", (unsigned long)(ESP.getPsramSize() / 1024));
+  lv_label_set_text_fmt(ramLabel, "Freier Heap: %lu KB", (unsigned long)(ESP.getFreeHeap() / 1024));
+  lv_label_set_text_fmt(loadLabel, "Touch-Eingaben: %lu", (unsigned long)refreshTapCount);
+#else
   if (WiFi.status() != WL_CONNECTED) {
     lv_label_set_text(infoLabel, "WLAN: getrennt");
     lv_label_set_text(hermesLabel, "Bridge nicht erreichbar");
@@ -162,6 +206,7 @@ static void statusRefresh() {
   else lv_label_set_text(ramLabel, "RAM-Belegung: --");
   if (!l.isNull()) lv_label_set_text_fmt(loadLabel, "Systemlast: %.2f", l.as<float>());
   else lv_label_set_text(loadLabel, "Systemlast: --");
+#endif
 }
 
 void setup() {
@@ -188,9 +233,14 @@ void setup() {
   indev.read_cb = touchRead;
   lv_indev_drv_register(&indev);
   buildUi();
+#if HT_DEMO_MODE
+  Serial.println("HERMES TOUCH: OFFLINE DEMO (no credentials / no network)");
+  statusRefresh();
+#else
   WiFi.mode(WIFI_STA);
   WiFi.begin(HT_WIFI_SSID, HT_WIFI_PASSWORD);
   lastWifiAttempt = millis();
+#endif
 }
 
 void loop() {
@@ -199,10 +249,12 @@ void loop() {
   lv_tick_inc(now - lastTick);
   lastTick = now;
   lv_timer_handler();
+#if !HT_DEMO_MODE
   if (WiFi.status() != WL_CONNECTED && now - lastWifiAttempt >= WIFI_RETRY_MS) {
     WiFi.reconnect();
     lastWifiAttempt = now;
   }
+#endif
   if (refreshRequested || now - lastRefresh >= STATUS_INTERVAL_MS) {
     refreshRequested = false;
     lastRefresh = now;
