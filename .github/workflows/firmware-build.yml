@@ -1,0 +1,56 @@
+name: OpenNextion firmware compile
+on:
+  push:
+    paths:
+      - 'firmware/**'
+      - '.github/workflows/firmware-build.yml'
+  pull_request:
+    paths:
+      - 'firmware/**'
+      - '.github/workflows/firmware-build.yml'
+  workflow_dispatch:
+
+jobs:
+  compile-esp32s3:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP32-S3 board support
+        run: |
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32@3.3.2 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+
+      - name: Install firmware libraries
+        run: |
+          arduino-cli lib install "GFX Library for Arduino"
+          arduino-cli lib install "Adafruit CST8XX Library"
+          arduino-cli lib install "Adafruit PCF8574"
+          arduino-cli lib install "ArduinoJson@7.4.2"
+          arduino-cli lib install "lvgl@8.3.11"
+
+      # Safe default: no Config.h, hence HT_DEMO_MODE=1.
+      # This build has no WiFi credentials and cannot call Hermes.
+      - name: Compile credential-free display demo
+        run: |
+          test ! -f firmware/HermesTouch/Config.h
+          arduino-cli compile \
+            --fqbn 'esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB' \
+            --build-path "${{ runner.temp }}/hermes-display-demo" \
+            firmware/HermesTouch
+
+      # Compile both conditional code paths. This config deliberately contains
+      # unusable placeholder values and is never uploaded or committed.
+      - name: Compile connected branch with placeholder config
+        run: |
+          cp firmware/HermesTouch/Config.h.example firmware/HermesTouch/Config.h
+          trap 'rm -f firmware/HermesTouch/Config.h' EXIT
+          arduino-cli compile \
+            --fqbn 'esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB' \
+            --build-path "${{ runner.temp }}/hermes-connected-build" \
+            firmware/HermesTouch
