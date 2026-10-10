@@ -83,6 +83,33 @@ Erwartet: `TLS verified against locally generated CA: YES`, `Bridge JSON status:
 
 Falls die Bindung fehlschlägt, zunächst `ip -4 -br addr show scope global` und die IP-Einstellung in der ignorierten `config/tls.env` prüfen. Kein Wechsel auf `0.0.0.0` und kein Deaktivieren der TLS-Prüfung. Der TLS-Dienst wird nicht automatisch als systemd-Dienst installiert.
 
+**Fehler `HTTPError` beim TLS-Smoke-Test (v0.6):** Ältere Skriptversionen zeigten den tatsächlichen HTTP-Statuscode nicht an. Die aktualisierte Version verwendet explizit `ProxyHandler({})`, um `HTTPS_PROXY`/`HTTP_PROXY` beim Aufruf der eigenen LAN-IP zu umgehen. Sie prüft weiterhin die Zertifikatskette und die IP-SAN; TLS-Sicherheitsprüfungen werden **nicht** abgeschaltet. Auch die TLS-Bridge leitet das Token grundsätzlich nur direkt an `127.0.0.1:8765` weiter, ohne Systemproxy.
+
+Nach `git pull --ff-only` laufenden TLS-Dienst mit Strg+C stoppen und neu starten. Portprüfung, ohne Geheimnisse:
+
+```bash
+ss -ltnp | grep -E ':(8765|8766)[[:space:]]' || true
+```
+
+Wenn `8765` nicht lauscht, in einem Terminal `bash scripts/pi/run-local.sh` starten. Wenn `8766` nicht lauscht, in einem **zweiten Terminal** `bash scripts/pi/run-tls.sh` starten. Anschließend:
+
+```bash
+python3 -m unittest discover -s tests -v
+bash scripts/pi/tls-smoke.sh
+```
+
+Die neue Diagnose unterscheidet:
+
+- **HTTP 401:** HTTPS-Dienst hat den Geräte-Token nicht akzeptiert. Passenden Prozess neu starten; Schlüssel niemals zur Diagnose ausgeben.
+- **HTTP 503:** HTTPS-Dienst läuft, aber seine lokale Bridge auf Port 8765 antwortet nicht erfolgreich.
+- **HTTP 404:** Falscher Dienst oder Endpunkt auf Port 8766.
+- **`CONNECTION FAIL`:** Erreichbarkeit, Listener oder Firewall.
+- **`TLS FAIL`:** IP-SAN, CA, Gültigkeitszeit oder TLS-Handshake prüfen.
+
+Bei HTTP-Fehlern erreicht der direkte Client den TLS-Dienst und hat dessen Zertifikat erfolgreich geprüft; der Fehler betrifft dann die Anwendungsebene. **Zertifikate nicht ungeprüft löschen oder erneut erzeugen.**
+
+
+
 ## 5. Verbindungs-Firmware erst nach bestandenem TLS-Test vorbereiten
 
 ```bash
