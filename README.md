@@ -85,7 +85,7 @@ git pull --ff-only
 python3 -m unittest discover -s tests -v
 ip -4 -br addr show scope global
 # Erst nach Auswahl der korrekten privaten LAN-IP:
-bash scripts/pi/tls-create-cert.sh <PI_LAN_IP>
+bash scripts/pi/tls-create-cert.sh 192.168.178.42  # Beispiel! echte Pi-LAN-IP einsetzen
 bash scripts/pi/export-ca-header.sh
 # In einem separaten Terminal bei laufender loopback Bridge:
 bash scripts/pi/run-tls.sh
