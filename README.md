@@ -46,7 +46,17 @@ curl --fail-with-body -sS -H "X-Hermes-Touch-Token: $HERMES_TOUCH_TOKEN" http://
 
 Die Firmware liegt unter `firmware/HermesTouch/`. **Ohne `Config.h`** startet sie im Offline-Testmodus und versucht **keine** WLAN-, Hermes- oder API-Verbindung. Auf dem Display erscheinen ein Testbildschirm, PSRAM-/Heap-Informationen sowie ein Touch-Zähler. Der Button „Aktualisieren“ muss den Zähler erhöhen.
 
-Zum hardwareseitigen Test: [Schritt-für-Schritt-Anleitung](docs/BOARD-BRINGUP.md).
+Zum hardwareseitigen Test: [Schritt-für-Schritt-Anleitung](docs/BOARD-BRINGUP.md). Auf dem Raspberry Pi 5:
+
+```bash
+git pull --ff-only
+bash scripts/pi/install-arduino-cli.sh     # geprüftes v1.5.1 Linux ARM64 Binary
+bash scripts/pi/firmware-preflight.sh
+bash scripts/pi/setup-arduino-toolchain.sh  # großer Paketdownload
+bash scripts/pi/firmware-build-offline.sh   # baut, flasht NICHT
+```
+
+Diese Skripte benötigen kein `sudo` und greifen nicht in laufende Hermes-Dienste ein.
 
 Ein GitHub-Actions-Build mit ESP32-Arduino-Core 3.3.2, LVGL 8.3.11 und ArduinoJson 7.4.2 prüft künftig beide Codepfade: [Firmware-Builds](https://github.com/mason82-dotcom/OpenNextion_Hermes_Dashboard/actions/workflows/firmware-build.yml). **Ein grüner Build ist vorerst noch nicht verifiziert.**
 
