@@ -116,6 +116,23 @@ bash scripts/pi/firmware-build-connected.sh
 # Kein automatischer Flash-Vorgang.
 ```
 
+## 30-Minuten-Stabilitätstest für v0.7 (kein Flashen)
+
+Nach dem bestätigten TLS-Ausfall- und Wiederherstellungstest kann die Pi-Seite mit einem **lokalen, lesenden HTTPS-Monitor** über 30 Minuten geprüft werden. Das Tool zeichnet Antwortzeiten, Ausfälle und ausgewählte Pi-Messwerte im ignorierten `build/stability/`-Verzeichnis auf. Ergänzend müssen die ESP32-Heap- und PSRAM-Werte am Anfang und am Ende direkt auf der SYSTEM-Seite verglichen werden – der Pi-Monitor kann diese nicht auslesen.
+
+[**Testanleitung: v0.7 30-Minuten-Stabilität**](docs/V0.7-STABILITY-TEST.md)
+
+```bash
+cd ~/Projekte/OpenNextion_Hermes_Dashboard
+git pull --ff-only
+python3 -m unittest discover -s tests -v
+bash scripts/pi/stability-monitor.sh --samples 3
+# Nach erfolgreichem Kurztest und Startfoto vom SYSTEM-Tab:
+bash scripts/pi/stability-monitor.sh --minutes 30 --interval 5
+```
+
+**Keine Änderung an Firmware, Zertifikaten oder Hermes erforderlich.** Der Monitor sendet nur zertifikatsgeprüfte HTTPS-GET-Anfragen, ohne Proxy/Redirects.
+
 ## Entwicklung auf dem Pi
 
 Siehe [docs/PI-SETUP.md](docs/PI-SETUP.md). Die Dateien können auf dem Pi per `git pull --ff-only` synchronisiert werden; installierte Agent-Dateien unter `~/.hermes` werden dabei nicht angerührt.
@@ -127,6 +144,6 @@ Siehe [docs/PI-SETUP.md](docs/PI-SETUP.md). Die Dateien können auf dem Pi per `
 - v0.5: vier LVGL-Touchseiten, lokaler Messverlauf, Systemseite und gesperrter Chat-Platzhalter – **fotografisch auf dem ONX3248G035 bestätigt**, einschließlich der tatsächlichen Graph-Zählung
 - v0.6: IP-SAN-HTTPS-Statusdienst, separate Geräteauthentifizierung, NTP-/CA-Prüfung – **auf Pi und ESP32 bestätigt**, einschließlich korrigierter Zahlenformatierung und Temperaturkurve
 - v0.7: FreeRTOS-Hintergrundtask, Snapshot-Mutex, Anzeigealter, stale-data-Sperre, Temperaturgrafik – **35 Tests, Pi-Build, Livebetrieb, kontrollierter TLS-Ausfall und Wiederherstellung auf ONX3248G035 bestätigt**
-- Nächste Etappe: 15–30 Minuten und länger stabilen Betrieb mit Heap-/PSRAM- und Neustartkontrolle prüfen; anschließend Fehlerdiagnose und Messgrafik verbessern. Chat bleibt gesperrt
+- Nächste Etappe: 30-Minuten-Langzeittest mit Pi-HTTPS-Messreihe (neues `stability-monitor.sh`) und ESP32-Speichervergleich auf dem SYSTEM-Reiter. Chat bleibt gesperrt
 
 Lizenz: noch festzulegen.
