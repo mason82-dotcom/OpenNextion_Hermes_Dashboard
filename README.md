@@ -2,7 +2,7 @@
 
 **Hermes Touch** – ESP32-S3 Touchscreen für den vorhandenen Hermes-Agent auf dem Raspberry Pi 5.
 
-**Stand: v0.3 – Status-MVP.** Quellcode im Repository; Der Anwender hat die Status-Bridge und den Hermes-API-Healthcheck auf seinem Pi erfolgreich getestet. Neue v0.3-Änderungen und der Firmware-Build sind noch **nicht** auf Hardware bestätigt.
+**Stand: v0.4 – Status-MVP + Offline-Hardware-Test.** Quellcode im Repository; Der Anwender hat die Status-Bridge und den Hermes-API-Healthcheck auf seinem Pi erfolgreich getestet. Neue v0.3-Änderungen und der Firmware-Build sind noch **nicht** auf Hardware bestätigt.
 
 ## Architektur
 
@@ -42,18 +42,17 @@ curl --fail-with-body -sS -H "X-Hermes-Touch-Token: $HERMES_TOUCH_TOKEN" http://
 
 `config/bridge.env` bleibt **lokal** und wird nicht versioniert. Das erzeugte Token wird nicht in GitHub gespeichert. Die Bridge bindet zunächst ausschließlich an `127.0.0.1`. Für das Display muss später eine abgesicherte Verbindung vom WLAN zum Pi eingerichtet werden; eine öffentliche Portfreigabe ist **nicht** zulässig.
 
-## Firmware
+## Firmware: zuerst sicherer Offline-Test
 
-Unter `firmware/HermesTouch/`:
+Die Firmware liegt unter `firmware/HermesTouch/`. **Ohne `Config.h`** startet sie im Offline-Testmodus und versucht **keine** WLAN-, Hermes- oder API-Verbindung. Auf dem Display erscheinen ein Testbildschirm, PSRAM-/Heap-Informationen sowie ein Touch-Zähler. Der Button „Aktualisieren“ muss den Zähler erhöhen.
 
-1. `Config.h.example` lokal nach `Config.h` kopieren.
-2. WLAN-SSID, WLAN-Passwort, Bridge-URL und **Bridge-Gerätetoken** eintragen, **niemals den Hermes-API-Key**.
-3. Arduino IDE 2.x: Board **ESP32S3 Dev Module**, Flash **16 MB**, PSRAM **OPI**, Partition **16 MB (3MB APP/9.9MB FATFS)**.
-4. Bibliotheken: **GFX Library for Arduino**, **Adafruit CST8XX**, **Adafruit PCF8574**, **lvgl 8.3.x**, **ArduinoJson 7.x**.
-5. `HermesTouch.ino` kompilieren und auf das OpenNextion ONX3248G035 übertragen.
+Zum hardwareseitigen Test: [Schritt-für-Schritt-Anleitung](docs/BOARD-BRINGUP.md).
 
-Vor dem Flashen bei Problemen bitte die offiziellen Beispiele `01_touch_test` und `09_outofbox_demo` testen:
-https://github.com/OpenNextion/OpenNextion-SKU-ONX3248G035
+Ein GitHub-Actions-Build mit ESP32-Arduino-Core 3.3.2, LVGL 8.3.11 und ArduinoJson 7.4.2 prüft künftig beide Codepfade: [Firmware-Builds](https://github.com/mason82-dotcom/OpenNextion_Hermes_Dashboard/actions/workflows/firmware-build.yml). **Ein grüner Build ist vorerst noch nicht verifiziert.**
+
+Board-Einstellungen: ESP32S3 Dev Module, 16MB Flash, OPI PSRAM, 16M Flash (3MB APP/9.9MB FATFS). Benötigte Libraries: GFX Library for Arduino, Adafruit CST8XX Library und Adafruit PCF8574.
+
+**Nicht vorzeitig vernetzen:** `Config.h.example` dient später als Vorlage für eine lokale `Config.h`, niemals den Hermes-API-Key eintragen. Der derzeitige HTTP-Client verschlüsselt das WLAN-Token nicht. Produktiver Betrieb erst nach Einführung eines sicheren Transports.
 
 ## Entwicklung auf dem Pi
 
