@@ -1,4 +1,4 @@
-/* Hermes Touch v0.5 - LVGL multi-page dashboard.
+/* Hermes Touch v0.6 - LVGL multi-page dashboard with optional TLS read-only status.
  * Hardware: OpenNextion ONX3248G035 / ESP32-S3.
  * Default build has no Config.h -> NO WIFI, NO DEVICE TOKEN, NO API ACCESS.
  * Status and history explicitly distinguish local ESP32 demo values from Pi data.
@@ -25,8 +25,11 @@
 
 #if !HT_DEMO_MODE
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <time.h>
+#include "LocalCa.h"
 #ifndef HT_WIFI_SSID
 #error "Config.h must define HT_WIFI_SSID"
 #endif
@@ -343,7 +346,7 @@ static void buildUi() {
   lv_obj_set_style_bg_color(screen, lv_color_hex(BG), 0);
   lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
   label(screen, "HERMES TOUCH", 13, 10, 200, CYAN);
-  label(screen, "v0.5  |  ONX3248G035", 13, 35, 280, MUTED);
+  label(screen, "v0.6  |  ONX3248G035", 13, 35, 280, MUTED);
   pages[0] = makePage(screen);
   pages[1] = makePage(screen);
   pages[2] = makePage(screen);
@@ -405,15 +408,29 @@ static void sampleStatus() {
     lv_label_set_text(statusHeadline, "WLAN NICHT VERBUNDEN");
     lv_label_set_text(statusDetail, "Pi-Daten momentan nicht verfuegbar");
   } else {
-    WiFiClient client;
+    // No cleartext fallback: require HTTPS, pinned local CA, and valid UTC.
+    const String base = String(HT_BRIDGE_URL);
+    const time_t utcNow = time(nullptr);
+    if (!base.startsWith("https://") || strlen(HT_CA_CERT) < 100) {
+      remoteValid = false;
+      lv_label_set_text(statusHeadline, "TLS NICHT KONFIGURIERT");
+      lv_label_set_text(statusDetail, "HTTPS-URL oder CA-Zertifikat fehlt");
+    } else if (utcNow < 1767225600L) { // 2026-01-01 UTC
+      remoteValid = false;
+      lv_label_set_text(statusHeadline, "UHRZEIT NICHT SYNCHRON");
+      lv_label_set_text(statusDetail, "Warte auf NTP fuer TLS-Pruefung");
+    } else {
+    WiFiClientSecure client;
+    client.setCACert(HT_CA_CERT);
     HTTPClient http;
-    String url = String(HT_BRIDGE_URL) + "/v1/status";
+    const String url = base + "/v1/status";
     if (!http.begin(client, url)) {
       remoteValid = false;
       lv_label_set_text(statusHeadline, "BRIDGE-FEHLER");
       lv_label_set_text(statusDetail, "HTTP nicht initialisiert");
     } else {
-      http.setTimeout(1200);
+      http.setConnectTimeout(4500);
+      http.setTimeout(4500);
       http.addHeader("X-Hermes-Touch-Token", HT_DEVICE_TOKEN);
       const int code = http.GET();
       if (code == 200) {
@@ -444,6 +461,7 @@ static void sampleStatus() {
         lv_label_set_text_fmt(statusDetail, "Bridge HTTP: %d", code);
       }
       http.end();
+    }
     }
   }
 
@@ -509,6 +527,8 @@ void setup() {
 #else
   WiFi.mode(WIFI_STA);
   WiFi.begin(HT_WIFI_SSID, HT_WIFI_PASSWORD);
+  // TLS verification needs a valid device clock; do not bypass it.
+  configTime(0, 0, "pool.ntp.org", "time.google.com");
   lastWifiAttempt = millis();
 #endif
   sampleStatus();
