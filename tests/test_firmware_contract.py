@@ -64,7 +64,7 @@ class FirmwareContractTests(unittest.TestCase):
         self.assertIn('lv_label_set_text(valueC, numberText)', FIRMWARE)
         self.assertIn('lv_label_set_text_fmt(historyValue, "Pi: %s C | %u/%u Werte"', FIRMWARE)
         import re
-        fmt_calls = re.findall(r'lv_label_set_text_fmt\\([^;]*?\\);', FIRMWARE, re.S)
+        fmt_calls = re.findall(r'lv_label_set_text_fmt[(][^;]*?[)][;]', FIRMWARE, re.S)
         self.assertGreater(len(fmt_calls), 0)
         for call in fmt_calls:
             self.assertNotRegex(call, r'%(?:[0-9.+-]*)(?:f|e|g|F|E|G)')
