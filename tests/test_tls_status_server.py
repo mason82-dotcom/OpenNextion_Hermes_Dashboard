@@ -16,6 +16,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import HTTPSHandler, ProxyHandler, Request, build_opener
 
 os.environ["HERMES_TOUCH_TOKEN"] = "tls-unit-test-token-abcdefghijklmnopqr"
+os.environ["HERMES_TOUCH_DEVICE_TOKEN"] = "test-device-token-abcdefghijklmnopqrstuvwxyz"
 SOURCE = Path(__file__).resolve().parents[1] / "bridge" / "tls_status_server.py"
 spec = importlib.util.spec_from_file_location("hermes_touch_tls", SOURCE)
 tls = importlib.util.module_from_spec(spec)
@@ -111,17 +112,21 @@ class TestTlsStatusHandler(unittest.TestCase):
     def test_missing_token_rejected(self):
         self.assertEqual(self.req()[0], 401)
 
+    def test_bridge_token_not_valid_on_tls_device_endpoint(self):
+        self.assertNotEqual(tls.TOKEN, tls.DEVICE_TOKEN)
+        self.assertEqual(self.req(token=tls.TOKEN)[0], 401)
+
     def test_write_denied(self):
-        self.assertEqual(self.req(method="POST", token=tls.TOKEN)[0], 405)
+        self.assertEqual(self.req(method="POST", token=tls.DEVICE_TOKEN)[0], 405)
 
     def test_non_status_path_denied(self):
-        self.assertEqual(self.req(path="/v1/status?x=1", token=tls.TOKEN)[0], 404)
-        self.assertEqual(self.req(path="/v1/chat", token=tls.TOKEN)[0], 404)
+        self.assertEqual(self.req(path="/v1/status?x=1", token=tls.DEVICE_TOKEN)[0], 404)
+        self.assertEqual(self.req(path="/v1/chat", token=tls.DEVICE_TOKEN)[0], 404)
 
     def test_verified_read_only_status(self):
         payload_data = b'{"ok":true,"schema_version":1,"chat":{"enabled":false}}'
         with patch.object(tls, "fetch_loopback_status", return_value=payload_data) as forwarded:
-            code, payload = self.req(token=tls.TOKEN)
+            code, payload = self.req(token=tls.DEVICE_TOKEN)
         self.assertEqual(code, 200)
         self.assertIs(payload["ok"], True)
         self.assertIs(payload["chat"]["enabled"], False)
@@ -129,15 +134,15 @@ class TestTlsStatusHandler(unittest.TestCase):
 
     def test_tls_cannot_use_untrusted_ca(self):
         with self.assertRaises(URLError):
-            self.req(token=tls.TOKEN, ctx=ssl.create_default_context())
+            self.req(token=tls.DEVICE_TOKEN, ctx=ssl.create_default_context())
 
     def test_tls_requires_matching_san(self):
         with self.assertRaises(URLError):
-            self.req(token=tls.TOKEN, hostname="localhost")
+            self.req(token=tls.DEVICE_TOKEN, hostname="localhost")
 
     def test_unavailable_local_bridge_is_503(self):
         with patch.object(tls, "fetch_loopback_status", side_effect=URLError("connection refused")):
-            code, doc = self.req(token=tls.TOKEN)
+            code, doc = self.req(token=tls.DEVICE_TOKEN)
         self.assertEqual(code, 503)
         self.assertEqual(doc["error"], "loopback_bridge_unavailable")
 
