@@ -19,4 +19,8 @@ if [[ "${HERMES_TOUCH_BIND:-127.0.0.1}" != "127.0.0.1" ]]; then
   printf 'REFUSED: bridge HTTP must bind only to 127.0.0.1.\n' >&2
   exit 3
 fi
+if [[ -z "${HERMES_TOUCH_DEVICE_TOKEN:-}" ]]; then
+  printf 'Missing separate HTTPS device token. Run: bash scripts/pi/create-device-token.sh\n' >&2
+  exit 3
+fi
 exec python3 "$ROOT/bridge/tls_status_server.py"
