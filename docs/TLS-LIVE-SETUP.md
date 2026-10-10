@@ -1,7 +1,6 @@
 # Hermes Touch v0.6: sichere Pi-Livedaten über HTTPS/TLS
 
-**Implementiert, aber noch nicht auf dem Raspberry Pi oder ESP32 getestet.**
-Die v0.5-Offlinedemo ist auf echter OpenNextion-Hardware bestätigt.
+**Auf echter Hardware bestätigt:** v0.6 nutzt erfolgreich WLAN/HTTPS zur Pi-Bridge. Vier fotografierte Bildschirmseiten zeigen `HERMES-API ERREICHBAR`, `Dashboard: OK | Gateway: ON`, eine reale CPU-Temperaturkurve und den weiterhin gesperrten Chat. Bei der ersten v0.6-Version trat ein **LVGL-Formatierungsfehler bei Fließkommawerten** auf (`f C`, `f %`, korrupte Diagrammbeschriftung). Der daraufhin eingecheckte Fix muss erst neu kompiliert und auf dem OpenNextion überprüft werden.
 
 ## Architektur / Sicherheitsgrenzen
 
@@ -153,11 +152,31 @@ Das Upload-Skript verwendet **ausschließlich** `build/firmware-connected/`, pr�
 
 **Wichtig:** Das verbundene Firmware-Binary enthält das lokale WLAN-Passwort und den Bridge-Token; das gesamte `build/`-Verzeichnis darf nicht veröffentlicht oder geteilt werden.
 
-## 6. Beobachtungen nach dem späteren Flash
+## 6. Beobachtungen nach dem Flash
 
 Auf **STATUS** werden Pi-CPU-Temperatur, Pi-RAM, Systemlast und Hermes-API-Status aus der Bridge dargestellt. Im Tab **GRAPH** erscheint der echte Temperaturverlauf des Pi (maximal 24 Messpunkte). **SYSTEM** zeigt weiterhin lokale ESP32-Hardwaredaten. **CHAT** bleibt gesperrt.
 
 Eine fehlgeschlagene Zertifikatsprüfung, fehlende Netzwerkverbindung, fehlender NTP-Sync oder ungültiges Token muss zu **keinen aktuellen Pi-Daten** führen, nicht zu erfundenen Werten.
+
+### v0.6-Hardwarebefund: Fließkommaformatierung in LVGL korrigieren
+
+Am OpenNextion wurden zunächst auf der **STATUS**-Seite `f C`, `f %` und `f` statt numerischer Werte angezeigt. Auf der **GRAPH**-Seite war die Messkurve plausibel, während die Beschriftung große falsche Zähler enthielt. Ursache ist die standardmäßig fehlende `%f`-Unterstützung bei `lv_label_set_text_fmt()` in LVGL 8.3; zudem kann diese einen nachfolgenden Argumentversatz auslösen.
+
+Der Fix formatiert Pi-CPU, Pi-RAM und Pi-Load über eine validierte, begrenzte Festkomma-Konvertierung mit C++-Ganzzahlformaten (`std::isfinite`, `snprintf`) und übergibt die Ergebnisse als `%s` an LVGL. Die Chat-Sperre, TLS-CA, PIN-Belegung und Konfiguration bleiben unangetastet.
+
+**Nächste Schritte mit vorhandener privater `Config.h` und `LocalCa.h`:**
+
+```bash
+cd ~/Projekte/OpenNextion_Hermes_Dashboard
+git pull --ff-only
+python3 -m unittest discover -s tests -v
+bash scripts/pi/tls-smoke.sh
+bash scripts/pi/firmware-build-connected.sh
+```
+
+Nur bei Erfolg und nach erneuter Kontrolle des tatsächlichen USB-Geräts die Firmware mit `bash scripts/pi/firmware-upload-connected.sh /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0` manuell übertragen. Danach überprüfen, ob z. B. `51.2 C`, `62.8 %`, `0.53` und `Pi: 51.2 C | x/24 Werte` dargestellt werden. Das sind **Beispielwerte**, keine aktuellen Live-Messungen.
+
+Es müssen **keine neuen Zertifikate und keine neuen WLAN-Schlüssel erstellt werden**. Die existierende `Config.h` wird wiederverwendet; der private verbundene Build muss nach dem Quellcode-Fix neu erstellt werden.
 
 ## Fehlerdiagnose und Grenzen
 
