@@ -1,0 +1,4 @@
+#pragma once
+// CI-only compile placeholder. Never flash CONNECTED mode with this trust anchor.
+// Generate the real LocalCa.h locally with scripts/pi/export-ca-header.sh.
+static const char HT_CA_CERT[] = "";
