@@ -4,6 +4,9 @@ These are source-contract checks, NOT a replacement for compiling and
 testing on the physical OpenNextion ONX3248G035.
 """
 from pathlib import Path
+import shutil
+import subprocess
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,7 +57,7 @@ class FirmwareContractTests(unittest.TestCase):
         # Without this guard the device shows "f C" and corrupts
         # subsequent variadic arguments (observed on real hardware).
         self.assertIn("static void decimalText(", FIRMWARE)
-        self.assertIn("isfinite(value)", FIRMWARE)
+        self.assertIn("std::isfinite(value)", FIRMWARE)
         self.assertIn("snprintf(out, cap,", FIRMWARE)
         self.assertIn('lv_label_set_text_fmt(valueA, "%s C", numberText)', FIRMWARE)
         self.assertIn('lv_label_set_text_fmt(valueB, "%s %%", numberText)', FIRMWARE)
@@ -65,6 +68,53 @@ class FirmwareContractTests(unittest.TestCase):
         self.assertGreater(len(fmt_calls), 0)
         for call in fmt_calls:
             self.assertNotRegex(call, r'%(?:[0-9.+-]*)(?:f|e|g|F|E|G)')
+
+    @unittest.skipUnless(shutil.which("g++"), "C++ host compiler unavailable")
+    def test_fixed_decimal_renderer_host_cpp(self):
+        """Compile and execute the ACTUAL Arduino float formatter with host C++.
+
+        This isolates the LVGL-unfriendly printf formatting from board
+        dependencies, and tests valid/invalid/fractional readings.
+        """
+        begin = FIRMWARE.index("static void decimalText(")
+        end = FIRMWARE.index("\nstatic void sampleStatus()", begin)
+        function_source = FIRMWARE[begin:end]
+        source = (
+            "#include <cmath>\\n#include <cstdio>\\n"
+            "#include <cstdint>\\n#include <cstring>\\n"
+            + function_source
+            + r"""
+int main() {
+    struct Case { float value; unsigned digits; const char *expected; };
+    const Case cases[] = {
+        {51.2f, 1, "51.2"}, {62.8f, 1, "62.8"},
+        {0.53f, 2, "0.53"}, {0.0f, 2, "0.00"},
+        {-2.75f, 2, "-2.75"}, {100.0f, 1, "100.0"},
+        {NAN, 1, "--"}, {INFINITY, 1, "--"},
+        {10001.0f, 1, "--"}
+    };
+    for (const auto &entry : cases) {
+        char buffer[24] = {};
+        decimalText(buffer, sizeof(buffer), entry.value, entry.digits);
+        if (strcmp(buffer, entry.expected) != 0) return 1;
+    }
+    char tiny[3] = {};
+    decimalText(tiny, sizeof(tiny), 51.2f, 1);
+    if (tiny[2] != '\\0') return 2;
+    return 0;
+}
+"""
+        )
+        with tempfile.TemporaryDirectory(prefix="hermes-decimal-test-") as work:
+            executable = str(Path(work) / "test_formatter")
+            subprocess.run(
+                ["g++", "-std=c++17", "-Wall", "-Wextra",
+                 "-pedantic", "-x", "c++", "-", "-o", executable],
+                input=source,
+                text=True, check=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            )
+            subprocess.run([executable], check=True, timeout=10)
 
     def test_no_chat_or_agent_write_actions(self):
         self.assertIn("CHAT IST DEAKTIVIERT", FIRMWARE)
