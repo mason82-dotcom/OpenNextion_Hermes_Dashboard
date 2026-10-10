@@ -1,4 +1,4 @@
-/* Hermes Touch v0.6 - LVGL multi-page dashboard with optional TLS read-only status.
+/* Hermes Touch v0.7 - responsive LVGL display with TLS background telemetry.
  * Hardware: OpenNextion ONX3248G035 / ESP32-S3.
  * Default build has no Config.h -> NO WIFI, NO DEVICE TOKEN, NO API ACCESS.
  * Status and history explicitly distinguish local ESP32 demo values from Pi data.
@@ -26,12 +26,7 @@
 #endif
 
 #if !HT_DEMO_MODE
-#include <WiFi.h>
-#include <WiFiClientSecure.h>
-#include <HTTPClient.h>
-#include <ArduinoJson.h>
-#include <time.h>
-#include "LocalCa.h"
+#include "TelemetryWorker.h"
 #ifndef HT_WIFI_SSID
 #error "Config.h must define HT_WIFI_SSID"
 #endif
@@ -47,7 +42,6 @@
 #endif
 
 static constexpr uint32_t SAMPLE_MS = 5000;
-static constexpr uint32_t WIFI_RETRY_MS = 15000;
 static constexpr uint32_t LCD_SPI_FREQ = 80000000;
 static constexpr uint16_t BUF_LINES = 40;
 static constexpr uint8_t GRAPH_SAMPLES = 24;
@@ -78,6 +72,7 @@ static lv_obj_t *valueB = nullptr;
 static lv_obj_t *valueC = nullptr;
 static lv_obj_t *valueD = nullptr;
 static lv_obj_t *statusFoot = nullptr;
+static lv_obj_t *connectionLabel = nullptr;
 static lv_obj_t *historyChart = nullptr;
 static lv_chart_series_t *historySeries = nullptr;
 static lv_obj_t *historyValue = nullptr;
@@ -88,22 +83,12 @@ static lv_obj_t *systemTouches = nullptr;
 static uint32_t touchActions = 0;
 static uint8_t historySampleCount = 0;
 static uint32_t lastSampleMs = 0;
-static uint32_t lastWifiAttempt = 0;
 static bool requestSample = false;
 static int activePage = 0;
 
 #if !HT_DEMO_MODE
-static bool remoteValid = false;
-static bool apiHealthy = false;
-static bool dashboardAvailable = false;
-static bool gatewayKnown = false;
-static bool gatewayRunning = false;
-static float piTemp = 0;
-static float piRam = 0;
-static float piLoad = 0;
-static bool piTempKnown = false;
-static bool piRamKnown = false;
-static bool piLoadKnown = false;
+// GUI-owned cursor only. The network task never accesses UI or chart objects.
+static uint32_t lastChartSequence = 0;
 #endif
 
 static void panelReset() {
@@ -348,7 +333,10 @@ static void buildUi() {
   lv_obj_set_style_bg_color(screen, lv_color_hex(BG), 0);
   lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
   label(screen, "HERMES TOUCH", 13, 10, 200, CYAN);
-  label(screen, "v0.6  |  ONX3248G035", 13, 35, 280, MUTED);
+  label(screen, "v0.7  |  ONX3248G035", 13, 35, 280, MUTED);
+#if !HT_DEMO_MODE
+  connectionLabel = label(screen, "WLAN --", 219, 12, 97, MUTED);
+#endif
   pages[0] = makePage(screen);
   pages[1] = makePage(screen);
   pages[2] = makePage(screen);
@@ -423,102 +411,95 @@ static void sampleStatus() {
   lv_label_set_text_fmt(historyValue, "Heap: %lu KB | %u/%u Werte", heapKb,
                         (unsigned)historySampleCount, (unsigned)GRAPH_SAMPLES);
 #else
-  if (WiFi.status() != WL_CONNECTED) {
-    remoteValid = false;
-    lv_label_set_text(statusHeadline, "WLAN NICHT VERBUNDEN");
-    lv_label_set_text(statusDetail, "Pi-Daten momentan nicht verfuegbar");
+  // GUI only copies a short struct. Never performs WiFi, HTTPS, JSON or NTP.
+  static TelemetrySnapshot latest;
+  TelemetrySnapshot incoming;
+  if (telemetryReadSnapshot(incoming)) latest = incoming;
+  const uint32_t age = (uint32_t)(millis() - latest.lastSuccessMs);
+  const bool fresh = latest.phase == TelemetryPhase::READY &&
+                     latest.hasLastGood && age <= TELEMETRY_FRESH_MS;
+
+  if (fresh) {
+    lv_label_set_text(connectionLabel, "TLS OK");
+    lv_label_set_text(statusHeadline, latest.apiHealthy ?
+                      "HERMES-API ERREICHBAR" : "HERMES-API NICHT GESUND");
+    lv_label_set_text_fmt(statusDetail, "Dashboard: %s | Gateway: %s",
+                          latest.dashboardAvailable ? "OK" : "--",
+                          latest.gatewayKnown ?
+                            (latest.gatewayRunning ? "ON" : "OFF") : "--");
+    lv_label_set_text_fmt(statusFoot, "Pi/TLS | vor %lu s",
+                          (unsigned long)(age / 1000));
   } else {
-    // No cleartext fallback: require HTTPS, pinned local CA, and valid UTC.
-    const String base = String(HT_BRIDGE_URL);
-    const time_t utcNow = time(nullptr);
-    if (!base.startsWith("https://") || strlen(HT_CA_CERT) < 100) {
-      remoteValid = false;
-      lv_label_set_text(statusHeadline, "TLS NICHT KONFIGURIERT");
-      lv_label_set_text(statusDetail, "HTTPS-URL oder CA-Zertifikat fehlt");
-    } else if (utcNow < 1767225600L) { // 2026-01-01 UTC
-      remoteValid = false;
-      lv_label_set_text(statusHeadline, "UHRZEIT NICHT SYNCHRON");
-      lv_label_set_text(statusDetail, "Warte auf NTP fuer TLS-Pruefung");
-    } else {
-    WiFiClientSecure client;
-    client.setCACert(HT_CA_CERT);
-    HTTPClient http;
-    const String url = base + "/v1/status";
-    if (!http.begin(client, url)) {
-      remoteValid = false;
-      lv_label_set_text(statusHeadline, "BRIDGE-FEHLER");
-      lv_label_set_text(statusDetail, "HTTP nicht initialisiert");
-    } else {
-      http.setConnectTimeout(4500);
-      http.setTimeout(4500);
-      http.addHeader("X-Hermes-Touch-Token", HT_DEVICE_TOKEN);
-      const int code = http.GET();
-      if (code == 200) {
-        JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, http.getStream());
-        if (!error && (doc["ok"] | false)) {
-          remoteValid = true;
-          apiHealthy = doc["hermes"]["api_healthy"] | false;
-          dashboardAvailable = doc["hermes"]["dashboard_status_available"] | false;
-          JsonVariant gw = doc["hermes"]["gateway_running"];
-          gatewayKnown = !gw.isNull();
-          gatewayRunning = gw.is<bool>() && gw.as<bool>();
-          JsonVariant t = doc["system"]["cpu_temp_c"];
-          JsonVariant r = doc["system"]["ram_used_pct"];
-          JsonVariant l = doc["system"]["load1"];
-          piTempKnown = !t.isNull();
-          piRamKnown = !r.isNull();
-          piLoadKnown = !l.isNull();
-          if (piTempKnown) piTemp = t.as<float>();
-          if (piRamKnown) piRam = r.as<float>();
-          if (piLoadKnown) piLoad = l.as<float>();
-        } else {
-          remoteValid = false;
-          lv_label_set_text(statusDetail, "Ungueltige JSON-Antwort");
-        }
-      } else {
-        remoteValid = false;
-        lv_label_set_text_fmt(statusDetail, "Bridge HTTP: %d", code);
-      }
-      http.end();
+    lv_label_set_text(connectionLabel, latest.wifiConnected ? "TLS --" : "WLAN --");
+    switch (latest.phase) {
+      case TelemetryPhase::WIFI_DOWN:
+        lv_label_set_text(statusHeadline, "WLAN NICHT VERBUNDEN");
+        lv_label_set_text(statusDetail, "Verbindung wird wiederholt");
+        break;
+      case TelemetryPhase::CLOCK_WAIT:
+        lv_label_set_text(statusHeadline, "UHRZEIT NICHT SYNCHRON");
+        lv_label_set_text(statusDetail, "Warte auf NTP fuer TLS");
+        break;
+      case TelemetryPhase::TLS_CONFIG:
+        lv_label_set_text(statusHeadline, "TLS KONFIGURATION FEHLT");
+        lv_label_set_text(statusDetail, "HTTPS-URL oder CA fehlt");
+        break;
+      case TelemetryPhase::HTTP_ERROR:
+        lv_label_set_text(statusHeadline, "BRIDGE NICHT ERREICHBAR");
+        lv_label_set_text_fmt(statusDetail, "HTTP/TLS: %d", latest.httpCode);
+        break;
+      case TelemetryPhase::JSON_ERROR:
+        lv_label_set_text(statusHeadline, "STATUS NICHT LESBAR");
+        lv_label_set_text(statusDetail, "Bridge JSON ungueltig");
+        break;
+      case TelemetryPhase::TASK_FAILED:
+        lv_label_set_text(statusHeadline, "TELEMETRIE NICHT GESTARTET");
+        lv_label_set_text(statusDetail, "Zu wenig Speicher fuer Task");
+        break;
+      case TelemetryPhase::READY:
+        lv_label_set_text(statusHeadline, "PI DATEN VERALTET");
+        lv_label_set_text(statusDetail, "Letzte Antwort zu alt");
+        break;
+      default:
+        lv_label_set_text(statusHeadline, "VERBINDUNG WIRD GEPRUEFT");
+        lv_label_set_text(statusDetail, "Pi/TLS wartet auf erste Messung");
+        break;
     }
-    }
+    if (latest.hasLastGood)
+      lv_label_set_text_fmt(statusFoot, "Keine Livewerte | letzter OK: %lu s",
+                            (unsigned long)(age / 1000));
+    else
+      lv_label_set_text(statusFoot, "Noch keine gueltigen Pi-Daten");
   }
 
-  if (remoteValid) {
-    lv_label_set_text(statusHeadline,
-                      apiHealthy ? "HERMES-API ERREICHBAR" : "HERMES-API UNBEKANNT");
-    lv_label_set_text_fmt(statusDetail, "Dashboard: %s | Gateway: %s",
-                          dashboardAvailable ? "OK" : "--",
-                          gatewayKnown ? (gatewayRunning ? "ON" : "OFF") : "--");
-  } else {
-    lv_label_set_text(statusHeadline, "KEINE AKTUELLEN PI-DATEN");
-  }
   char numberText[24];
-  if (remoteValid && piTempKnown) {
-    decimalText(numberText, sizeof(numberText), piTemp, 1);
+  if (fresh && latest.piTempKnown) {
+    decimalText(numberText, sizeof(numberText), latest.piTemp, 1);
     lv_label_set_text_fmt(valueA, "%s C", numberText);
-    pushHistory((int32_t)constrain((int)piTemp, 0, 100));
+    // A GUI tick may run multiple times between network polls.
+    // Append ONLY once per newly received successful sample.
+    if (latest.sequence != lastChartSequence) {
+      pushHistory((int32_t)constrain((int)latest.piTemp, 0, 100));
+      lastChartSequence = latest.sequence;
+    }
     lv_label_set_text_fmt(historyValue, "Pi: %s C | %u/%u Werte", numberText,
                           (unsigned)historySampleCount, (unsigned)GRAPH_SAMPLES);
   } else {
     lv_label_set_text(valueA, "--");
-    lv_label_set_text(historyValue, "Keine gueltige Pi-Temperatur");
+    lv_label_set_text(historyValue, "Keine aktuellen Pi-Temperaturwerte");
   }
-  if (remoteValid && piRamKnown) {
-    decimalText(numberText, sizeof(numberText), piRam, 1);
+  if (fresh && latest.piRamKnown) {
+    decimalText(numberText, sizeof(numberText), latest.piRam, 1);
     lv_label_set_text_fmt(valueB, "%s %%", numberText);
   } else {
     lv_label_set_text(valueB, "--");
   }
-  if (remoteValid && piLoadKnown) {
-    decimalText(numberText, sizeof(numberText), piLoad, 2);
+  if (fresh && latest.piLoadKnown) {
+    decimalText(numberText, sizeof(numberText), latest.piLoad, 2);
     lv_label_set_text(valueC, numberText);
   } else {
     lv_label_set_text(valueC, "--");
   }
-  lv_label_set_text(statusFoot, remoteValid ? "Quelle: Raspberry Pi / Bridge" :
-                                       "Quelle: Pi derzeit nicht erreichbar");
 #endif
   updateLocalSystem();
 }
@@ -551,13 +532,11 @@ void setup() {
   buildUi();
 
 #if HT_DEMO_MODE
-  Serial.println("HERMES TOUCH v0.5 OFFLINE: NO WIFI / NO API / READ-ONLY");
+  Serial.println("HERMES TOUCH v0.7 OFFLINE: NO WIFI / NO API / READ-ONLY");
 #else
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(HT_WIFI_SSID, HT_WIFI_PASSWORD);
-  // TLS verification needs a valid device clock; do not bypass it.
-  configTime(0, 0, "pool.ntp.org", "time.google.com");
-  lastWifiAttempt = millis();
+  // Creates a separate FreeRTOS network worker; LVGL never waits for HTTPS.
+  if (!telemetryStart())
+    Serial.println("WARN: Hermes telemetry worker could not start");
 #endif
   sampleStatus();
   lastSampleMs = millis();
@@ -569,16 +548,21 @@ void loop() {
   lv_tick_inc(now - lastTick);
   lastTick = now;
   lv_timer_handler();
-#if !HT_DEMO_MODE
-  if (WiFi.status() != WL_CONNECTED && now - lastWifiAttempt >= WIFI_RETRY_MS) {
-    WiFi.reconnect();
-    lastWifiAttempt = now;
-  }
-#endif
-  if (requestSample || now - lastSampleMs >= SAMPLE_MS) {
+#if HT_DEMO_MODE
+  if (requestSample || (uint32_t)(now - lastSampleMs) >= SAMPLE_MS) {
     requestSample = false;
     lastSampleMs = now;
     sampleStatus();
   }
+#else
+  if (requestSample) {
+    requestSample = false;
+    telemetryRequestRefresh(); // notify worker, never start HTTP in LVGL task
+  }
+  if ((uint32_t)(now - lastSampleMs) >= 1000) {
+    lastSampleMs = now;
+    sampleStatus(); // read synchronized snapshot and update labels/chart only
+  }
+#endif
   delay(5);
 }
