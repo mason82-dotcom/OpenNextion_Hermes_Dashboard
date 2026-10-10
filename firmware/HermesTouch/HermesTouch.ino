@@ -89,6 +89,7 @@ static int activePage = 0;
 #if !HT_DEMO_MODE
 // GUI-owned cursor only. The network task never accesses UI or chart objects.
 static uint32_t lastChartSequence = 0;
+static bool telemetryStarted = false;
 #endif
 
 static void panelReset() {
@@ -414,7 +415,8 @@ static void sampleStatus() {
   // GUI only copies a short struct. Never performs WiFi, HTTPS, JSON or NTP.
   static TelemetrySnapshot latest;
   TelemetrySnapshot incoming;
-  if (telemetryReadSnapshot(incoming)) latest = incoming;
+  if (!telemetryStarted) latest.phase = TelemetryPhase::TASK_FAILED;
+  else if (telemetryReadSnapshot(incoming)) latest = incoming;
   const uint32_t age = (uint32_t)(millis() - latest.lastSuccessMs);
   const bool fresh = latest.phase == TelemetryPhase::READY &&
                      latest.hasLastGood && age <= TELEMETRY_FRESH_MS;
@@ -535,7 +537,8 @@ void setup() {
   Serial.println("HERMES TOUCH v0.7 OFFLINE: NO WIFI / NO API / READ-ONLY");
 #else
   // Creates a separate FreeRTOS network worker; LVGL never waits for HTTPS.
-  if (!telemetryStart())
+  telemetryStarted = telemetryStart();
+  if (!telemetryStarted)
     Serial.println("WARN: Hermes telemetry worker could not start");
 #endif
   sampleStatus();
