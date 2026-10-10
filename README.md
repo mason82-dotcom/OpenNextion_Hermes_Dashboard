@@ -2,7 +2,7 @@
 
 **Hermes Touch** – ESP32-S3 Touchscreen für den vorhandenen Hermes-Agent auf dem Raspberry Pi 5.
 
-**Stand: v0.6 – HTTPS-Liveanbindung auf echter Hardware bestätigt.** Vier Bildschirmseiten, Hermes-API-, Dashboard- und Gateway-Status sowie eine echte Pi-Temperaturkurve wurden auf dem ONX3248G035 fotografisch bestätigt. Der anfängliche LVGL-Fließkommaformatierungsfehler wurde korrigiert, neu kompiliert und **mit korrekt angezeigten Dezimalwerten und einer beschrifteten Live-Kurve auf dem ONX3248G035 bestätigt**. Zertifikatsvalidierung und Read-only-Bridge funktionieren.
+**Stand: v0.7 – HTTPS-Abfragen im Hintergrund (Hardwaretest ausstehend).** Vier Bildschirmseiten, Hermes-API-, Dashboard- und Gateway-Status sowie eine echte Pi-Temperaturkurve wurden auf dem ONX3248G035 fotografisch bestätigt. Der anfängliche LVGL-Fließkommaformatierungsfehler wurde korrigiert, neu kompiliert und **mit korrekt angezeigten Dezimalwerten und einer beschrifteten Live-Kurve auf dem ONX3248G035 bestätigt**. Zertifikatsvalidierung und Read-only-Bridge funktionieren. **Die v0.7-Firmware ist noch nicht auf dem ESP32 getestet; die erfolgreich laufende v0.6-Firmware bleibt bis zum manuellen Flash installiert.**
 
 ## Architektur
 
@@ -97,6 +97,25 @@ bash scripts/pi/tls-smoke.sh
 
 Nach dem Hinzufügen des separaten Geräte-Tokens muss der TLS-Prozess auf Port 8766 neu gestartet und `bash scripts/pi/tls-smoke.sh` erneut erfolgreich ausgeführt werden. Danach kann die lokale Geräte-Konfiguration ohne Passwortausgabe mit `python3 scripts/pi/configure-device.py` erstellt und die verbundene Firmware mit `bash scripts/pi/firmware-build-connected.sh` kompiliert werden. Dieser Schritt flasht **nicht**.
 
+## Neu in v0.7: blockierungsfreie Touch-Oberfläche
+
+Der Live-Modus nutzt jetzt einen dedizierten **FreeRTOS-Netzwerk-Task** für WLAN, NTP, HTTPS, Zertifikatsprüfung und JSON. Die LVGL-Hauptschleife liest nur noch einen per Mutex geschützten, sofort kopierbaren Status-Snapshot. Damit blockiert ein langsamer HTTPS-Handshake nicht mehr den Touch-Loop.
+
+Die Anzeige zeigt **TLS OK** bzw. den Fehlerzustand und das **Alter der letzten gültigen Messung**. Nach Netzwerkfehlern sind Pi-Werte ausdrücklich als nicht aktuell gekennzeichnet; die Grafik zeichnet jede erfolgreiche Antwort nur **einmal**. Der Chat bleibt gesperrt.
+
+**Noch nicht auf Hardware getestet.** Die bisherigen Zertifikate und das lokale `Config.h` bleiben unverändert. Der Pi-Build bleibt **inkrementell ohne `--clean`**.
+
+[**v0.7 Testanleitung für Pi und ESP32**](docs/V0.7-ASYNC-TEST.md)
+
+```bash
+cd ~/Projekte/OpenNextion_Hermes_Dashboard
+git pull --ff-only
+python3 -m unittest discover -s tests -v
+bash scripts/pi/tls-smoke.sh
+bash scripts/pi/firmware-build-connected.sh
+# Kein automatischer Flash-Vorgang.
+```
+
 ## Entwicklung auf dem Pi
 
 Siehe [docs/PI-SETUP.md](docs/PI-SETUP.md). Die Dateien können auf dem Pi per `git pull --ff-only` synchronisiert werden; installierte Agent-Dateien unter `~/.hermes` werden dabei nicht angerührt.
@@ -107,6 +126,7 @@ Siehe [docs/PI-SETUP.md](docs/PI-SETUP.md). Die Dateien können auf dem Pi per `
 - v0.4: nachweislich erfolgreicher ESP32-S3-Clean-Build; Display und Touch auf realer ONX3248G035-Hardware getestet
 - v0.5: vier LVGL-Touchseiten, lokaler Messverlauf, Systemseite und gesperrter Chat-Platzhalter – **fotografisch auf dem ONX3248G035 bestätigt**, einschließlich der tatsächlichen Graph-Zählung
 - v0.6: IP-SAN-HTTPS-Statusdienst, separate Geräteauthentifizierung, NTP-/CA-Prüfung – **auf Pi und ESP32 bestätigt**, einschließlich korrigierter Zahlenformatierung und Temperaturkurve
-- Nächste Etappe: HTTPS-Abfragen in einen Hintergrundtask verlagern, um Touch-Blockaden bei langsamen Netzen zu vermeiden; Stabilität, Fehlerzustände und die Chat-Sperre weiter prüfen
+- v0.7: HTTPS-Abfragen im FreeRTOS-Hintergrundtask, Snapshot-Mutex, Anzeigealter, stale-data-Sperre und einmalige Graph-Samples – **Code umgesetzt, Pi-Build und Hardwaretest ausstehend**
+- Nächste Etappe: v0.7-Build, reaktionsschneller Touch-/Netzausfalltest und Langzeit-Stabilität; Chat bleibt gesperrt
 
 Lizenz: noch festzulegen.
