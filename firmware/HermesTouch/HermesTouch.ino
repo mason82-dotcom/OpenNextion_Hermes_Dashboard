@@ -81,6 +81,7 @@ static lv_obj_t *systemPsram = nullptr;
 static lv_obj_t *systemUptime = nullptr;
 static lv_obj_t *systemTouches = nullptr;
 static uint32_t touchActions = 0;
+static uint8_t historySampleCount = 0;
 static uint32_t lastSampleMs = 0;
 static uint32_t lastWifiAttempt = 0;
 static bool requestSample = false;
@@ -205,6 +206,7 @@ static void resetHistory(lv_event_t *event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
   ++touchActions;
   lv_chart_set_all_value(historyChart, historySeries, LV_CHART_POINT_NONE);
+  historySampleCount = 0;
   requestSample = true;
 }
 
@@ -381,6 +383,7 @@ static void updateLocalSystem() {
 
 static void pushHistory(int32_t sample) {
   lv_chart_set_next_value(historyChart, historySeries, (lv_coord_t)sample);
+  if (historySampleCount < GRAPH_SAMPLES) ++historySampleCount;
 }
 
 static void sampleStatus() {
@@ -393,8 +396,9 @@ static void sampleStatus() {
   lv_label_set_text_fmt(valueB, "%lu KB", psramKb);
   lv_label_set_text_fmt(valueC, "%lu min", (unsigned long)(millis() / 60000));
   lv_label_set_text(statusFoot, "Quelle: ESP32, nicht Raspberry Pi");
-  lv_label_set_text_fmt(historyValue, "Heap frei: %lu KB  |  24 Punkte", heapKb);
   pushHistory((int32_t)heapKb);
+  lv_label_set_text_fmt(historyValue, "Heap: %lu KB | %u/%u Werte", heapKb,
+                        (unsigned)historySampleCount, (unsigned)GRAPH_SAMPLES);
 #else
   if (WiFi.status() != WL_CONNECTED) {
     remoteValid = false;
@@ -454,8 +458,9 @@ static void sampleStatus() {
   }
   if (remoteValid && piTempKnown) {
     lv_label_set_text_fmt(valueA, "%.1f C", piTemp);
-    lv_label_set_text_fmt(historyValue, "Pi CPU: %.1f C  |  24 Punkte", piTemp);
     pushHistory((int32_t)constrain((int)piTemp, 0, 100));
+    lv_label_set_text_fmt(historyValue, "Pi: %.1f C | %u/%u Werte", piTemp,
+                          (unsigned)historySampleCount, (unsigned)GRAPH_SAMPLES);
   } else {
     lv_label_set_text(valueA, "--");
     lv_label_set_text(historyValue, "Keine gueltige Pi-Temperatur");
