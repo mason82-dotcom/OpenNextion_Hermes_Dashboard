@@ -123,7 +123,18 @@ Der ESP32 verlangt eine `https://`-URL, ein echtes CA-Zertifikat und synchronisi
 
 Der Build mit `firmware-build-connected.sh` enthält WLAN-Passwort und Geräte-Token **im Binärimage**. Deshalb wird er unter `build/firmware-connected/` lokal und mit beschränkten Rechten erzeugt. Kein automatisches Flashen.
 
-**Erst nach erfolgreicher Prüfung** des TLS-Smoketests, der verbundenen Kompilierung und des USB-Geräts erfolgt ein separat bestätigter Firmware-Upload; dafür wird die bestehende funktionierende Offline-Firmware absichtlich nicht überschrieben.
+**Erst nach erfolgreicher Prüfung** des TLS-Smoketests, der verbundenen Kompilierung und des USB-Geräts folgt ein separat bestätigter Firmware-Upload. Der bis dahin funktionierende Offline-Firmwarestand bleibt erhalten.
+
+```bash
+# Nur nach erfolgreichem verbundenem Build; noch nicht vorzeitig ausführen!
+ls -l /dev/serial/by-id/
+bash scripts/pi/firmware-upload-connected.sh \
+  /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0
+```
+
+Das Upload-Skript verwendet **ausschließlich** `build/firmware-connected/`, prüft aktuelle Konfiguration/Binärartefakte sowie den TLS-Smoketest und erfordert die interaktive Eingabe `FLASH-HERMES-TLS`. Es ersetzt dann die vorhandene Offline-Testfirmware. Es ist nicht möglich, versehentlich mit dem Offline-Build-Verzeichnis weiterzufahren.
+
+**Wichtig:** Das verbundene Firmware-Binary enthält das lokale WLAN-Passwort und den Bridge-Token; das gesamte `build/`-Verzeichnis darf nicht veröffentlicht oder geteilt werden.
 
 ## 6. Beobachtungen nach dem späteren Flash
 
