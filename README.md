@@ -73,7 +73,7 @@ Dieses Upload-Skript erfordert eine ausdrückliche Bestätigung. Die bereits ins
 
 ## Neu in v0.6: vertrauenswürdige Pi-Livedaten
 
-Der Client im verbundenen Modus verwendet jetzt **ausschließlich HTTPS/TLS** und prüft das Serverzertifikat gegen die lokal generierte CA, den Servernamen beziehungsweise die IP-Adresse und die TLS-Gültigkeit nach NTP-Zeitabgleich. Es gibt keinen `setInsecure()`- oder HTTP-Rückfall. Der TLS-Server auf dem Pi akzeptiert nur `GET /v1/status` mit dem Geräte-Token.
+Der Client im verbundenen Modus verwendet jetzt **ausschließlich HTTPS/TLS** und prüft das Serverzertifikat gegen die lokal generierte CA, den Servernamen beziehungsweise die IP-Adresse und die TLS-Gültigkeit nach NTP-Zeitabgleich. Es gibt keinen `setInsecure()`- oder HTTP-Rückfall. Der TLS-Server auf dem Pi akzeptiert nur `GET /v1/status` mit einem **separaten HTTPS-Geräte-Token**, der sich vom lokalen Bridge-Token unterscheidet.
 
 **Noch nicht live getestet.** Die vorherige v0.5-Offlinedemo läuft nachweislich auf dem ONX3248G035. Sie bleibt unverändert, bis alle TLS- und Firmware-Tests erfolgreich sind.
 
@@ -83,6 +83,8 @@ Der Client im verbundenen Modus verwendet jetzt **ausschließlich HTTPS/TLS** un
 cd ~/Projekte/OpenNextion_Hermes_Dashboard
 git pull --ff-only
 python3 -m unittest discover -s tests -v
+# Bei bestehender TLS-Installation nach dem Update zuerst:
+bash scripts/pi/create-device-token.sh
 ip -4 -br addr show scope global
 # Erst nach Auswahl der korrekten privaten LAN-IP:
 bash scripts/pi/tls-create-cert.sh 192.168.178.42  # Beispiel! echte Pi-LAN-IP einsetzen
@@ -93,7 +95,7 @@ bash scripts/pi/run-tls.sh
 bash scripts/pi/tls-smoke.sh
 ```
 
-Danach kann die lokale Geräte-Konfiguration ohne Passwortausgabe mit `python3 scripts/pi/configure-device.py` erstellt und die verbundene Firmware mit `bash scripts/pi/firmware-build-connected.sh` kompiliert werden. Dieser Schritt flasht **nicht**.
+Nach dem Hinzufügen des separaten Geräte-Tokens muss der TLS-Prozess auf Port 8766 neu gestartet und `bash scripts/pi/tls-smoke.sh` erneut erfolgreich ausgeführt werden. Danach kann die lokale Geräte-Konfiguration ohne Passwortausgabe mit `python3 scripts/pi/configure-device.py` erstellt und die verbundene Firmware mit `bash scripts/pi/firmware-build-connected.sh` kompiliert werden. Dieser Schritt flasht **nicht**.
 
 ## Entwicklung auf dem Pi
 
