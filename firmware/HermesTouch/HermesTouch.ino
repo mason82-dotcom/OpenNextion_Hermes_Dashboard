@@ -204,9 +204,7 @@ static void onRefresh(lv_event_t *event) {
 static void resetHistory(lv_event_t *event) {
   if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
   ++touchActions;
-  for (uint8_t i = 0; i < GRAPH_SAMPLES; ++i)
-    historySeries->y_points[i] = LV_CHART_POINT_NONE;
-  lv_chart_refresh(historyChart);
+  lv_chart_set_all_value(historyChart, historySeries, LV_CHART_POINT_NONE);
   requestSample = true;
 }
 
@@ -294,9 +292,7 @@ static void buildHistoryPage(lv_obj_t *p) {
 #endif
   historySeries = lv_chart_add_series(
       historyChart, lv_color_hex(CYAN), LV_CHART_AXIS_PRIMARY_Y);
-  for (uint8_t i = 0; i < GRAPH_SAMPLES; ++i)
-    historySeries->y_points[i] = LV_CHART_POINT_NONE;
-  lv_chart_refresh(historyChart);
+  lv_chart_set_all_value(historyChart, historySeries, LV_CHART_POINT_NONE);
 
   historyValue = label(p, "Warte auf erste Messung ...",
                        13, 266, 292, FG);
