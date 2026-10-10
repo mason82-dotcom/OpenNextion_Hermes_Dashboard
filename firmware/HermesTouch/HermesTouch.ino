@@ -391,7 +391,7 @@ static void pushHistory(int32_t sample) {
   if (historySampleCount < GRAPH_SAMPLES) ++historySampleCount;
 }
 
-// LVGL 8.3's lv_label_set_text_fmt() does not enable %f by default.
+// LVGL 8.3 label printf omits float formatting (%f) by default.
 // Convert floats to fixed-point digits using ONLY libc integer formatting;
 // then pass the completed text to LVGL via its supported %s conversion.
 static void decimalText(char *out, size_t cap, float value, uint8_t digits) {
