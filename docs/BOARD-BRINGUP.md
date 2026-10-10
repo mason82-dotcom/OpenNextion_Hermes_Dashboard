@@ -26,34 +26,37 @@ https://github.com/mason82-dotcom/OpenNextion_Hermes_Dashboard/actions/workflows
 
 ## 2a. Offline-Build direkt auf dem Raspberry Pi 5
 
-Die Pi-Installation ist unabhängig vom laufenden Hermes-Agent. Zuerst ohne Änderungen prüfen:
+Auf dem Raspberry Pi 5 (Linux aarch64) wird eine geprüfte, stabile **Arduino CLI 1.5.1** ohne `sudo` installiert. Das Installationsskript prüft die offizielle SHA-256-Summe des ARM64-Archivs und bricht bei Abweichungen ab.
 
 ```bash
 cd ~/Projekte/OpenNextion_Hermes_Dashboard
+git pull --ff-only
+bash scripts/pi/install-arduino-cli.sh
 bash scripts/pi/firmware-preflight.sh
 ```
 
-Falls die Arduino CLI bereits installiert ist, aber der ESP32-Core oder Bibliotheken fehlen, installiere sie **ausdrücklich** mit diesen Befehlen (lädt Pakete aus dem Internet, benötigt freien Speicherplatz):
+Arduino CLI liegt anschließend unter `~/.local/bin/arduino-cli`. Die Pi-Skripte ergänzen diesen Pfad vorübergehend in ihrer eigenen Umgebung, ohne `~/.bashrc` oder Systemverzeichnisse anzufassen. Für direkte CLI-Befehle in deinem Terminal optional einmalig:
 
 ```bash
-arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
-arduino-cli core install esp32:esp32@3.3.2 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
-arduino-cli lib install "GFX Library for Arduino"
-arduino-cli lib install "Adafruit CST8XX Library"
-arduino-cli lib install "Adafruit PCF8574"
-arduino-cli lib install "ArduinoJson@7.4.2"
-arduino-cli lib install "lvgl@8.3.11"
+export PATH="$HOME/.local/bin:$PATH"
+arduino-cli version
 ```
 
-Falls `arduino-cli` noch nicht installiert ist, zunächst das offiziell bereitgestellte Binary für Linux ARM64 installieren: https://arduino.github.io/arduino-cli/latest/installation/ . Die Pi-Preflight-Diagnose ändert keine Pakete.
+Erst **danach**, als separater Schritt, ESP32-Arduino-Core und benötigte Bibliotheken installieren (Netzwerk-Download, benötigt entsprechend freien Speicherplatz):
 
-Erst danach das eigentliche Offline-Projekt kompilieren:
+```bash
+bash scripts/pi/setup-arduino-toolchain.sh
+```
+
+Das Skript installiert ESP32-Arduino-Core **3.3.2**, LVGL **8.3.11**, ArduinoJson **7.4.2** und die benötigten GFX-, CST8XX- und PCF8574-Bibliotheken. Es führt keinerlei Flash-Vorgang aus und verändert keine Hermes-Installation.
+
+Anschließend nur die Firmware kompilieren:
 
 ```bash
 bash scripts/pi/firmware-build-offline.sh
 ```
 
-Dieses Skript verweigert den Build, wenn eine private `firmware/HermesTouch/Config.h` vorhanden ist. Es verwendet ausschließlich die Offline-Demo und legt Dateien unter `build/firmware-offline` ab. **Es flasht niemals.** Die Firmware muss anschließend gezielt über den erkannten seriellen Anschluss mit der Arduino CLI oder IDE übertragen werden.
+Dieses Skript verweigert die Kompilierung, wenn eine private `firmware/HermesTouch/Config.h` vorhanden ist. Es verwendet ausschließlich die Offline-Demo und legt Binärdateien unter `build/firmware-offline` ab. **Es flasht niemals.**
 
 ## 3. Arduino IDE (alternativ, manuell)
 
