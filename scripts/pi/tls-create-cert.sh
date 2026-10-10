@@ -66,6 +66,8 @@ printf 'HERMES_TOUCH_TLS_BIND=%s\nHERMES_TOUCH_TLS_PORT=8766\n' "$IP" > "$TLS_EN
 printf 'HERMES_TOUCH_TLS_CERT=%s\nHERMES_TOUCH_TLS_KEY=%s\n' \
   "$PKI/server.crt" "$PKI/server.key" >> "$TLS_ENV"
 chmod 600 "$TLS_ENV"
+# A distinct HTTPS client token is added only for newly provisioned configs.
+bash "$ROOT/scripts/pi/create-device-token.sh"
 printf 'TLS materials ready in config/pki/. CA and server PRIVATE keys: 0600.\n'
 printf 'Server certificate: IP SAN %s, ~365 days. Config: %s\n' "$IP" "$TLS_ENV"
 printf 'IMPORTANT: do not publish config/pki or config/tls.env.\n'
