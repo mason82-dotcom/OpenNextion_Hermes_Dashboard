@@ -2,7 +2,7 @@
 
 **Hermes Touch** – ESP32-S3 Touchscreen für den vorhandenen Hermes-Agent auf dem Raspberry Pi 5.
 
-**Stand: v0.5 – Touch-Dashboard mit vier Seiten.** Die v0.4-Firmware wurde erfolgreich auf dem OpenNextion ONX3248G035 geflasht; Display, Touch und 8192 KB PSRAM funktionieren. Der v0.5-Build und der neue Hardwaretest stehen noch aus. Die Pi-Bridge und Hermes-Healthchecks funktionieren.
+**Stand: v0.5 – Touch-Dashboard auf echter Hardware bestätigt.** Vier Seiten (Status, Graph, System, Chat) laufen sichtbar auf dem ONX3248G035. Display, Touch, Graph und 8192 KB PSRAM sind nachgewiesen. Die Pi-Bridge und Hermes-Healthchecks funktionieren. Eine nachfolgende kleine Korrektur an der Graph-Beschriftung ist noch nicht neu kompiliert/geflasht.
 
 ## Architektur
 
@@ -51,7 +51,7 @@ Die neue Oberfläche unter `firmware/HermesTouch/` zeigt **STATUS**, **GRAPH**, 
 - **SYSTEM:** Display-/Controller-Infos und aktuelle ESP32-Speicherwerte.
 - **CHAT:** Sichtbar, aber technisch gesperrt – keinerlei Schreibzugriffe oder Nachrichtenversand.
 
-**Ohne `Config.h`** bleibt die Firmware vollständig offline: kein WLAN, kein HTTP, kein Hermes-Zugriff. Insbesondere gibt es **keine simulierten Pi-Livedaten**. Die vom Nutzer bestätigte Hardwarefunktion betrifft die v0.4-Testfirmware, nicht bereits den neuen v0.5-Bildschirm.
+**Ohne `Config.h`** bleibt die Firmware vollständig offline: kein WLAN, kein HTTP, kein Hermes-Zugriff. Insbesondere gibt es **keine simulierten Pi-Livedaten**. Der Nutzer hat inzwischen auch alle vier Seiten der neuen v0.5-Firmware fotografisch auf dem Display bestätigt.
 
 Anleitung für Build, Flashen und die vier Touchseiten:
 [**v0.5 Touch-Test**](docs/V0.5-TOUCH-TEST.md).
@@ -78,7 +78,7 @@ Siehe [docs/PI-SETUP.md](docs/PI-SETUP.md). Die Dateien können auf dem Pi per `
 
 - v0.1–v0.3: read-only Python-Bridge auf dem Pi, Hermes-API- und Dashboard-Healthchecks, Status-Endpunkt und automatisierte Tests
 - v0.4: nachweislich erfolgreicher ESP32-S3-Clean-Build; Display und Touch auf realer ONX3248G035-Hardware getestet
-- v0.5: vier LVGL-Touchseiten, lokaler Messverlauf, Systemseite und gesperrter Chat-Platzhalter – **neu zu kompilieren und auf Hardware zu testen**
+- v0.5: vier LVGL-Touchseiten, lokaler Messverlauf, Systemseite und gesperrter Chat-Platzhalter – **fotografisch auf dem ONX3248G035 bestätigt**; kleinere Zähler-Korrektur noch zu testen
 - Nächste Etappe: robuste Geräte-Telemetrie, TLS/Authentifizierung, echte Pi-Livewerte; erst danach ein eingeschränkter Chat-Modus
 
 Lizenz: noch festzulegen.
