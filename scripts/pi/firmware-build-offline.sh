@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Compile offline demo only. No Wi-Fi, no Hermes key, NO FLASHING.
 set -euo pipefail
+# Discover user-installed Arduino CLI without changing shell dotfiles.
+export PATH="$HOME/.local/bin:$PATH"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SKETCH="$ROOT/firmware/HermesTouch"
 if [[ -e "$SKETCH/Config.h" ]]; then
