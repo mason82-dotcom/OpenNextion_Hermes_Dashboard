@@ -11,3 +11,8 @@ __pycache__/
 build/
 .pio/
 .DS_Store
+
+# Local TLS PKI (CA/server private keys) and per-device trust/config
+config/tls.env
+config/pki/
+firmware/HermesTouch/LocalCa.h
