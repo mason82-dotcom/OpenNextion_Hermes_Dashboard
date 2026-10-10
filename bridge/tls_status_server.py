@@ -18,6 +18,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener
 
 TOKEN = os.environ.get("HERMES_TOUCH_TOKEN", "")
+DEVICE_TOKEN = os.environ.get("HERMES_TOUCH_DEVICE_TOKEN", "")
 LOCAL_PORT = int(os.environ.get("HERMES_TOUCH_PORT", "8765"))
 TLS_BIND = os.environ.get("HERMES_TOUCH_TLS_BIND", "")
 TLS_PORT = int(os.environ.get("HERMES_TOUCH_TLS_PORT", "8766"))
@@ -75,7 +76,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def authenticated(self):
         supplied = self.headers.get("X-Hermes-Touch-Token", "")
-        return len(TOKEN) >= 24 and hmac.compare_digest(TOKEN, supplied)
+        return len(DEVICE_TOKEN) >= 24 and hmac.compare_digest(DEVICE_TOKEN, supplied)
 
     def do_GET(self):
         # Exact match: reject query strings, path traversal and other endpoints.
@@ -113,8 +114,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     bind = validate_private_bind(TLS_BIND)
-    if len(TOKEN) < 24:
-        raise SystemExit("Missing strong HERMES_TOUCH_TOKEN")
+    if len(TOKEN) < 24 or len(DEVICE_TOKEN) < 24:
+        raise SystemExit("Missing strong Bridge or device token")
+    if hmac.compare_digest(TOKEN, DEVICE_TOKEN):
+        raise SystemExit("Device token must differ from loopback Bridge token")
     if not TLS_CERT or not TLS_KEY:
         raise SystemExit("Missing TLS certificate/key configuration")
     if not Path(TLS_CERT).is_file() or not Path(TLS_KEY).is_file():
