@@ -24,6 +24,37 @@ Die GitHub Action `.github/workflows/firmware-build.yml` baut zwei Varianten:
 Die ersten Builds müssen in GitHub Actions grün werden, bevor man von einer erfolgreich kompilierten Firmware sprechen kann:
 https://github.com/mason82-dotcom/OpenNextion_Hermes_Dashboard/actions/workflows/firmware-build.yml
 
+## 2a. Offline-Build direkt auf dem Raspberry Pi 5
+
+Die Pi-Installation ist unabhängig vom laufenden Hermes-Agent. Zuerst ohne Änderungen prüfen:
+
+```bash
+cd ~/Projekte/OpenNextion_Hermes_Dashboard
+bash scripts/pi/firmware-preflight.sh
+```
+
+Falls die Arduino CLI bereits installiert ist, aber der ESP32-Core oder Bibliotheken fehlen, installiere sie **ausdrücklich** mit diesen Befehlen (lädt Pakete aus dem Internet, benötigt freien Speicherplatz):
+
+```bash
+arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+arduino-cli core install esp32:esp32@3.3.2 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+arduino-cli lib install "GFX Library for Arduino"
+arduino-cli lib install "Adafruit CST8XX Library"
+arduino-cli lib install "Adafruit PCF8574"
+arduino-cli lib install "ArduinoJson@7.4.2"
+arduino-cli lib install "lvgl@8.3.11"
+```
+
+Falls `arduino-cli` noch nicht installiert ist, zunächst das offiziell bereitgestellte Binary für Linux ARM64 installieren: https://arduino.github.io/arduino-cli/latest/installation/ . Die Pi-Preflight-Diagnose ändert keine Pakete.
+
+Erst danach das eigentliche Offline-Projekt kompilieren:
+
+```bash
+bash scripts/pi/firmware-build-offline.sh
+```
+
+Dieses Skript verweigert den Build, wenn eine private `firmware/HermesTouch/Config.h` vorhanden ist. Es verwendet ausschließlich die Offline-Demo und legt Dateien unter `build/firmware-offline` ab. **Es flasht niemals.** Die Firmware muss anschließend gezielt über den erkannten seriellen Anschluss mit der Arduino CLI oder IDE übertragen werden.
+
 ## 3. Arduino IDE (alternativ, manuell)
 
 Hersteller-Beispiele: https://github.com/OpenNextion/OpenNextion-SKU-ONX3248G035
