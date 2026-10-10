@@ -15,7 +15,7 @@ import ssl
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 TOKEN = os.environ.get("HERMES_TOUCH_TOKEN", "")
 LOCAL_PORT = int(os.environ.get("HERMES_TOUCH_PORT", "8765"))
@@ -36,6 +36,24 @@ def validate_private_bind(value: str) -> str:
     if ip.version != 4 or not any(ip in net for net in PRIVATE_V4_NETWORKS):
         raise ValueError("TLS bind must be an explicit RFC1918 IPv4 LAN address")
     return str(ip)
+
+
+def fetch_loopback_status() -> bytes:
+    """Fetch the internal Bridge without ever inheriting proxy settings.
+
+    Authentication token must not be forwarded to an HTTP_PROXY/ALL_PROXY.
+    Only the exact local loopback origin and read-only path are supported.
+    """
+    req = Request(
+        f"http://127.0.0.1:{LOCAL_PORT}/v1/status",
+        headers={
+            "X-Hermes-Touch-Token": TOKEN,
+            "Accept": "application/json",
+        },
+    )
+    opener = build_opener(ProxyHandler({}))
+    with opener.open(req, timeout=2.0) as upstream:
+        return upstream.read(16385)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -67,16 +85,8 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authenticated():
             self.respond(401, {"error": "unauthorized"})
             return
-        req = Request(
-            f"http://127.0.0.1:{LOCAL_PORT}/v1/status",
-            headers={
-                "X-Hermes-Touch-Token": TOKEN,
-                "Accept": "application/json",
-            },
-        )
         try:
-            with urlopen(req, timeout=2.0) as upstream:
-                data = upstream.read(16385)
+            data = fetch_loopback_status()
             if len(data) > 16384:
                 self.respond(502, {"error": "upstream_too_large"})
                 return
