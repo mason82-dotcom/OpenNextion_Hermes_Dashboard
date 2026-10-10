@@ -47,8 +47,12 @@ class TestBridge(unittest.TestCase):
         self.assertEqual(code, 401)
 
     def test_status(self):
-        with patch.object(module, "dashboard_probe", return_value={"dashboard_reachable": False, "version": None}), \
-             patch.object(module, "api_health_probe", return_value={"api_reachable": True, "api_healthy": True}):
+        with patch.object(module, "health_snapshot", return_value={
+            "dashboard_reachable": False,
+            "dashboard_status_available": False,
+            "api_reachable": True,
+            "api_healthy": True,
+        }):
             code, data = self.req(token=module.TOKEN)
         self.assertEqual(code, 200)
         self.assertIn("system", data)
@@ -72,6 +76,62 @@ class TestBridge(unittest.TestCase):
         with patch.object(module, "urlopen", side_effect=URLError("refused")):
             self.assertEqual(module.api_health_probe(),
                              {"api_reachable": False, "api_healthy": False})
+
+    def test_dashboard_success(self):
+        from unittest.mock import MagicMock
+        reply = MagicMock()
+        reply.__enter__.return_value.status = 200
+        reply.__enter__.return_value.read.return_value = (
+            b'{"version":"1.0","gateway_running":true}')
+        with patch.object(module, "urlopen", return_value=reply) as mocked:
+            data = module.dashboard_probe()
+        self.assertTrue(data["dashboard_reachable"])
+        self.assertTrue(data["dashboard_status_available"])
+        self.assertEqual(data["dashboard_reason"], "ok")
+        self.assertTrue(data["gateway_running"])
+        self.assertEqual(mocked.call_count, 1)
+
+    def test_dashboard_status_timeout_health_ok(self):
+        from unittest.mock import MagicMock
+        reply = MagicMock()
+        reply.__enter__.return_value.status = 200
+        with patch.object(module, "urlopen",
+                          side_effect=[TimeoutError(), reply]) as mocked:
+            data = module.dashboard_probe()
+        self.assertEqual(mocked.call_count, 2)
+        self.assertTrue(data["dashboard_reachable"])
+        self.assertFalse(data["dashboard_status_available"])
+        self.assertEqual(data["dashboard_reason"], "timeout")
+
+    def test_dashboard_http_401(self):
+        from io import BytesIO
+        error = HTTPError("http://127.0.0.1:9119/api/status",
+                          401, "Unauthorized", None, BytesIO(b""))
+        with patch.object(module, "urlopen", side_effect=error):
+            data = module.dashboard_probe()
+        self.assertTrue(data["dashboard_reachable"])
+        self.assertFalse(data["dashboard_status_available"])
+        self.assertEqual(data["dashboard_reason"], "http_401")
+
+    def test_dashboard_bad_json(self):
+        from unittest.mock import MagicMock
+        reply = MagicMock()
+        reply.__enter__.return_value.status = 200
+        reply.__enter__.return_value.read.return_value = b"<html>login</html>"
+        with patch.object(module, "urlopen", return_value=reply):
+            data = module.dashboard_probe()
+        self.assertTrue(data["dashboard_reachable"])
+        self.assertFalse(data["dashboard_status_available"])
+        self.assertEqual(data["dashboard_reason"], "invalid_json")
+
+    def test_requests_never_call_upstream(self):
+        with patch.object(module, "dashboard_probe",
+                          side_effect=AssertionError("blocking upstream")), \
+             patch.object(module, "api_health_probe",
+                          side_effect=AssertionError("blocking upstream")):
+            code, data = self.req(token=module.TOKEN)
+        self.assertEqual(code, 200)
+        self.assertTrue(data["ok"])
 
     def test_admin_absent(self):
         code, data = self.req(path="/v1/admin", token=module.TOKEN)
