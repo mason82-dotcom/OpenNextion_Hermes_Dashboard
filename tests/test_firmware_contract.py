@@ -33,6 +33,13 @@ class FirmwareContractTests(unittest.TestCase):
         self.assertIn("lv_chart_set_next_value(", FIRMWARE)
         self.assertIn("Quelle: ESP32, nicht Raspberry Pi", FIRMWARE)
 
+    def test_graph_reports_real_sample_count(self):
+        self.assertIn("historySampleCount", FIRMWARE)
+        self.assertIn("if (historySampleCount < GRAPH_SAMPLES)", FIRMWARE)
+        self.assertIn("historySampleCount = 0;", FIRMWARE)
+        self.assertIn("%u/%u Werte", FIRMWARE)
+        self.assertNotIn("24 Punkte", FIRMWARE)
+
     def test_no_chat_or_agent_write_actions(self):
         self.assertIn("CHAT IST DEAKTIVIERT", FIRMWARE)
         self.assertNotIn("http.POST(", FIRMWARE)
