@@ -80,8 +80,8 @@ class FirmwareContractTests(unittest.TestCase):
         end = FIRMWARE.index("\nstatic void sampleStatus()", begin)
         function_source = FIRMWARE[begin:end]
         source = (
-            "#include <cmath>\\n#include <cstdio>\\n"
-            "#include <cstdint>\\n#include <cstring>\\n"
+            "#include <cmath>\n#include <cstdio>\n"
+            "#include <cstdint>\n#include <cstring>\n"
             + function_source
             + r"""
 int main() {
@@ -100,7 +100,7 @@ int main() {
     }
     char tiny[3] = {};
     decimalText(tiny, sizeof(tiny), 51.2f, 1);
-    if (tiny[2] != '\\0') return 2;
+    if (tiny[2] != '\0') return 2;
     return 0;
 }
 """
