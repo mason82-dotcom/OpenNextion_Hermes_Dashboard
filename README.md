@@ -2,7 +2,7 @@
 
 **Hermes Touch** – ESP32-S3 Touchscreen für den vorhandenen Hermes-Agent auf dem Raspberry Pi 5.
 
-**Stand: v0.7 – HTTPS-Abfragen im Hintergrund (Hardwaretest ausstehend).** Vier Bildschirmseiten, Hermes-API-, Dashboard- und Gateway-Status sowie eine echte Pi-Temperaturkurve wurden auf dem ONX3248G035 fotografisch bestätigt. Der anfängliche LVGL-Fließkommaformatierungsfehler wurde korrigiert, neu kompiliert und **mit korrekt angezeigten Dezimalwerten und einer beschrifteten Live-Kurve auf dem ONX3248G035 bestätigt**. Zertifikatsvalidierung und Read-only-Bridge funktionieren. **Die v0.7-Firmware ist noch nicht auf dem ESP32 getestet; die erfolgreich laufende v0.6-Firmware bleibt bis zum manuellen Flash installiert.**
+**Stand: v0.7 – Live-Betrieb auf echter OpenNextion-Hardware bestätigt.** Der ESP32-S3 zeigt `TLS OK`, Hermes-API-/Dashboard-/Gateway-Status sowie aktuelle Pi-Temperatur, RAM, Load und eine korrekt beschriftete Live-Kurve. Die v0.7-Firmware wurde nach 35 erfolgreichen Tests auf dem Pi kompiliert und auf dem ONX3248G035 gestartet. **Noch offen:** kontrollierter HTTPS-Ausfalltest und Langzeit-Stabilität; die Fotos allein belegen keine garantierte Touch-Latenz bei Störungen.
 
 ## Architektur
 
@@ -103,7 +103,7 @@ Der Live-Modus nutzt jetzt einen dedizierten **FreeRTOS-Netzwerk-Task** für WLA
 
 Die Anzeige zeigt **TLS OK** bzw. den Fehlerzustand und das **Alter der letzten gültigen Messung**. Nach Netzwerkfehlern sind Pi-Werte ausdrücklich als nicht aktuell gekennzeichnet; die Grafik zeichnet jede erfolgreiche Antwort nur **einmal**. Der Chat bleibt gesperrt.
 
-**Noch nicht auf Hardware getestet.** Die bisherigen Zertifikate und das lokale `Config.h` bleiben unverändert. Der Pi-Build bleibt **inkrementell ohne `--clean`**.
+**Normalbetrieb auf Hardware bestätigt:** Statusseite mit `TLS OK`, 52.4 C, 63.8 % RAM, 0.90 Load und `Pi/TLS | vor 3 s`; Graphseite mit `Pi: 53.5 C | 11/24 Werte` (Momentaufnahmen). **Ausfall-/Stabilitätstest noch offen.** Die Zertifikate und das lokale `Config.h` bleiben unverändert. Der Pi-Build bleibt **inkrementell ohne `--clean`**.
 
 [**v0.7 Testanleitung für Pi und ESP32**](docs/V0.7-ASYNC-TEST.md)
 
@@ -126,7 +126,7 @@ Siehe [docs/PI-SETUP.md](docs/PI-SETUP.md). Die Dateien können auf dem Pi per `
 - v0.4: nachweislich erfolgreicher ESP32-S3-Clean-Build; Display und Touch auf realer ONX3248G035-Hardware getestet
 - v0.5: vier LVGL-Touchseiten, lokaler Messverlauf, Systemseite und gesperrter Chat-Platzhalter – **fotografisch auf dem ONX3248G035 bestätigt**, einschließlich der tatsächlichen Graph-Zählung
 - v0.6: IP-SAN-HTTPS-Statusdienst, separate Geräteauthentifizierung, NTP-/CA-Prüfung – **auf Pi und ESP32 bestätigt**, einschließlich korrigierter Zahlenformatierung und Temperaturkurve
-- v0.7: HTTPS-Abfragen im FreeRTOS-Hintergrundtask, Snapshot-Mutex, Anzeigealter, stale-data-Sperre und einmalige Graph-Samples – **Code umgesetzt, Pi-Build und Hardwaretest ausstehend**
-- Nächste Etappe: v0.7-Build, reaktionsschneller Touch-/Netzausfalltest und Langzeit-Stabilität; Chat bleibt gesperrt
+- v0.7: FreeRTOS-Hintergrundtask, Snapshot-Mutex, Anzeigealter, stale-data-Sperre, Temperaturgrafik – **35 Tests, Pi-Build und Livebetrieb auf ONX3248G035 bestätigt**; Ausfalltest offen
+- Nächste Etappe: kontrollierter TLS-Netzausfall mit weiter bedienbarer Touch-Oberfläche, automatische Wiederherstellung und Langzeit-Stabilität; Chat bleibt gesperrt
 
 Lizenz: noch festzulegen.
