@@ -19,7 +19,16 @@ class FirmwareContractTests(unittest.TestCase):
     def test_network_dependencies_conditional(self):
         self.assertIn("#if !HT_DEMO_MODE\n#include <WiFi.h>", FIRMWARE)
         self.assertIn('#include <HTTPClient.h>', FIRMWARE)
+        self.assertIn('#include <WiFiClientSecure.h>', FIRMWARE)
+        self.assertIn('#include "LocalCa.h"', FIRMWARE)
         self.assertIn('#include <ArduinoJson.h>', FIRMWARE)
+
+    def test_https_only_and_no_tls_bypass(self):
+        self.assertIn('base.startsWith("https://")', FIRMWARE)
+        self.assertIn("client.setCACert(HT_CA_CERT)", FIRMWARE)
+        self.assertIn("configTime(0, 0,", FIRMWARE)
+        self.assertNotIn("setInsecure(", FIRMWARE)
+        self.assertNotIn("WiFiClient client;", FIRMWARE)
 
     def test_four_touch_pages(self):
         self.assertIn("PAGE_COUNT = 4", FIRMWARE)
