@@ -29,7 +29,7 @@ ctx.verify_mode = ssl.CERT_REQUIRED
 
 host = os.environ["HERMES_TOUCH_TLS_BIND"]
 port = int(os.environ.get("HERMES_TOUCH_TLS_PORT", "8766"))
-token = os.environ["HERMES_TOUCH_TOKEN"]
+token = os.environ["HERMES_TOUCH_DEVICE_TOKEN"]
 url = f"https://{host}:{port}/v1/status"
 req = Request(url, headers={"X-Hermes-Touch-Token": token, "Accept": "application/json"})
 # Intentionally do not use HTTPS_PROXY/HTTP_PROXY/ALL_PROXY from the Pi shell:
