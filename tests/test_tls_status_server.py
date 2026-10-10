@@ -13,7 +13,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import HTTPSHandler, ProxyHandler, Request, build_opener
 
 os.environ["HERMES_TOUCH_TOKEN"] = "tls-unit-test-token-abcdefghijklmnopqr"
 SOURCE = Path(__file__).resolve().parents[1] / "bridge" / "tls_status_server.py"
@@ -88,10 +88,25 @@ class TestTlsStatusHandler(unittest.TestCase):
         header = {"X-Hermes-Touch-Token": token} if token is not None else {}
         request = Request(f"https://{hostname}:{self.port}{path}", headers=header, method=method)
         try:
-            with urlopen(request, context=ctx or self.context, timeout=3) as response:
+            opener = build_opener(ProxyHandler({}), HTTPSHandler(context=ctx or self.context))
+            with opener.open(request, timeout=3) as response:
                 return response.status, json.load(response)
         except HTTPError as exc:
             return exc.code, json.load(exc)
+
+    def test_internal_bridge_ignores_proxy_environment(self):
+        from unittest.mock import MagicMock
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"ok":true}'
+        fake_opener = MagicMock()
+        fake_opener.open.return_value = response
+        with patch.object(tls, "build_opener", return_value=fake_opener) as maker:
+            payload = tls.fetch_loopback_status()
+        self.assertEqual(payload, b'{"ok":true}')
+        self.assertEqual(len(maker.call_args.args), 1)
+        self.assertIsInstance(maker.call_args.args[0], ProxyHandler)
+        self.assertEqual(maker.call_args.args[0].proxies, {})
+        self.assertTrue(fake_opener.open.call_args.args[0].full_url.startswith("http://127.0.0.1:"))
 
     def test_missing_token_rejected(self):
         self.assertEqual(self.req()[0], 401)
@@ -104,16 +119,13 @@ class TestTlsStatusHandler(unittest.TestCase):
         self.assertEqual(self.req(path="/v1/chat", token=tls.TOKEN)[0], 404)
 
     def test_verified_read_only_status(self):
-        class Response:
-            def __enter__(self): return self
-            def __exit__(self, *a): return None
-            def read(self, _n): return b'{"ok":true,"schema_version":1,"chat":{"enabled":false}}'
-        with patch.object(tls, "urlopen", return_value=Response()) as forwarded:
+        payload_data = b'{"ok":true,"schema_version":1,"chat":{"enabled":false}}'
+        with patch.object(tls, "fetch_loopback_status", return_value=payload_data) as forwarded:
             code, payload = self.req(token=tls.TOKEN)
         self.assertEqual(code, 200)
         self.assertIs(payload["ok"], True)
         self.assertIs(payload["chat"]["enabled"], False)
-        self.assertTrue(forwarded.call_args.args[0].full_url.startswith("http://127.0.0.1:"))
+        forwarded.assert_called_once_with()
 
     def test_tls_cannot_use_untrusted_ca(self):
         with self.assertRaises(URLError):
@@ -124,7 +136,7 @@ class TestTlsStatusHandler(unittest.TestCase):
             self.req(token=tls.TOKEN, hostname="localhost")
 
     def test_unavailable_local_bridge_is_503(self):
-        with patch.object(tls, "urlopen", side_effect=URLError("connection refused")):
+        with patch.object(tls, "fetch_loopback_status", side_effect=URLError("connection refused")):
             code, doc = self.req(token=tls.TOKEN)
         self.assertEqual(code, 503)
         self.assertEqual(doc["error"], "loopback_bridge_unavailable")
