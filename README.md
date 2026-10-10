@@ -2,7 +2,7 @@
 
 **Hermes Touch** – ESP32-S3 Touchscreen für den vorhandenen Hermes-Agent auf dem Raspberry Pi 5.
 
-**Stand: v0.1 – Status-MVP.** Quellcode im Repository; Bridge-Tests laufen automatisiert. Hardware-Build und Installation auf dem Pi sind noch **nicht** nachgewiesen.
+**Stand: v0.2 – Status-MVP.** Quellcode im Repository; Bridge-Tests laufen automatisiert. Hardware-Build und Installation auf dem Pi sind noch **nicht** nachgewiesen.
 
 ## Architektur
 
@@ -12,7 +12,8 @@ ONX3248G035 (ESP32-S3 / LVGL)
     ▼
 Pi 5: Hermes-Touch-Bridge (:8765)
     ├── Linux-Systemdaten (/proc, /sys) – nur lesen
-    └── optionaler Dashboard-Reachability-Check (localhost:9119)
+    ├── Hermes API /health (localhost:8642) – nur lesen
+    └── Dashboard /api/status (localhost:9119) – nur lesen
         [bestehender Hermes-Agent bleibt unverändert]
 ```
 
@@ -30,7 +31,7 @@ bash scripts/pi/create-local-config.sh
 bash scripts/pi/run-local.sh
 ```
 
-Anschließend im zweiten Terminal auf dem Pi:
+Anschließend im zweiten Terminal auf dem Pi (oder mit `bash scripts/pi/smoke-status.sh` den Verbindungsstatus beider Hermes-Komponenten prüfen):
 
 ```bash
 cd ~/Projekte/OpenNextion_Hermes_Dashboard
@@ -59,7 +60,7 @@ Siehe [docs/PI-SETUP.md](docs/PI-SETUP.md). Die Dateien können auf dem Pi per `
 
 ## Geplante Ausbaustufen
 
-- v0.1: Statusanzeige, sichere lokale Grundkonfiguration, Tests
+- v0.1–0.2: Statusanzeige, Hermes-API- und Dashboard-Healthchecks, sichere lokale Grundkonfiguration, Tests
 - v0.2: realer Firmware-Build, LVGL-Touchtest und WLAN-Verbindung
 - v0.3: gesicherter Device-to-Pi-Transport, Gateway- und Task-Status
 - v0.4: kontrollierter Chat über Hermes-API mit separater Freigabe
