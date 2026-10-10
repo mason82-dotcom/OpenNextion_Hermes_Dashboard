@@ -36,6 +36,7 @@ static lv_obj_t *ramLabel;
 static lv_obj_t *loadLabel;
 static uint32_t lastRefresh = 0;
 static uint32_t lastWifiAttempt = 0;
+static bool refreshRequested = false;
 
 static void panelReset() {
   if (!expander.begin(PCF8574_ADDR, &Wire)) {
@@ -85,6 +86,10 @@ static lv_obj_t *makeLabel(lv_obj_t *parent, const char *text, int x, int y, uin
   return label;
 }
 
+static void requestRefresh(lv_event_t *event) {
+  if (lv_event_get_code(event) == LV_EVENT_CLICKED) refreshRequested = true;
+}
+
 static void buildUi() {
   lv_obj_t *scr = lv_scr_act();
   lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
@@ -97,6 +102,13 @@ static void buildUi() {
   tempLabel = makeLabel(scr, "CPU-Temperatur: --", 14, 236, 0xffffff);
   ramLabel = makeLabel(scr, "RAM-Belegung: --", 14, 286, 0xffffff);
   loadLabel = makeLabel(scr, "Systemlast: --", 14, 336, 0xffffff);
+  lv_obj_t *refreshBtn = lv_btn_create(scr);
+  lv_obj_set_size(refreshBtn, 146, 40);
+  lv_obj_set_pos(refreshBtn, 14, 392);
+  lv_obj_add_event_cb(refreshBtn, requestRefresh, LV_EVENT_CLICKED, nullptr);
+  lv_obj_t *refreshText = lv_label_create(refreshBtn);
+  lv_label_set_text(refreshText, "Aktualisieren");
+  lv_obj_center(refreshText);
   makeLabel(scr, "STATUS-MODUS  /  CHAT GESPERRT", 14, 437, 0x9fb2c8);
 }
 
@@ -104,6 +116,9 @@ static void statusRefresh() {
   if (WiFi.status() != WL_CONNECTED) {
     lv_label_set_text(infoLabel, "WLAN: getrennt");
     lv_label_set_text(hermesLabel, "Bridge nicht erreichbar");
+    lv_label_set_text(tempLabel, "CPU-Temperatur: --");
+    lv_label_set_text(ramLabel, "RAM-Belegung: --");
+    lv_label_set_text(loadLabel, "Systemlast: --");
     return;
   }
   String url = String(HT_BRIDGE_URL) + "/v1/status";
@@ -181,7 +196,8 @@ void loop() {
     WiFi.reconnect();
     lastWifiAttempt = now;
   }
-  if (now - lastRefresh >= STATUS_INTERVAL_MS) {
+  if (refreshRequested || now - lastRefresh >= STATUS_INTERVAL_MS) {
+    refreshRequested = false;
     lastRefresh = now;
     statusRefresh();
   }
