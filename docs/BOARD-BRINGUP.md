@@ -84,7 +84,62 @@ Serial-Monitor auf 115200 Baud aktivieren. Erwartete Meldung: `HERMES TOUCH: OFF
 
 **Nicht** wahllos Board-Pins oder Spannungen ändern. Das LCD-Reset läuft über den PCF8574, und die Touch-I²C-Adresse ist board-spezifisch.
 
-## 5. Netzwerk erst im nächsten Schritt
+## 5. Seriellen Port prüfen und Offline-Test flashen
+
+Nach dem erfolgreich bestätigten Clean-Build liegen im Ordner
+`build/firmware-offline/` die Bootloader-, Partitionen- und Applikationsdatei.
+Beim Pi 5 wurde ein USB-Seriell-Wandler mit Herstellerkennung `1a86`
+unter `/dev/ttyUSB0` gefunden. **Diese Kennung identifiziert nur einen
+USB-Seriell-Adapter und beweist noch nicht, dass es das OpenNextion ist.**
+
+Vor jeglichem Flashen den Anschluss **physisch prüfen**: Gerät abziehen,
+`ls -l /dev/serial/by-id/` aufrufen, OpenNextion wieder anschließen und die
+neu erscheinende Zuordnung kontrollieren. Vorhandene serielle Geräte nicht
+blind überschreiben.
+
+```bash
+cd ~/Projekte/OpenNextion_Hermes_Dashboard
+git pull --ff-only
+ls -l /dev/serial/by-id/
+arduino-cli board list
+```
+
+Falls das OpenNextion nach diesem Verfahren tatsächlich unter dem
+folgenden Pfad erscheint, kann das Upload-Skript verwendet werden:
+
+```bash
+bash scripts/pi/firmware-upload-offline.sh \
+  /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0
+```
+
+Das Skript prüft vorhandene Firmware-Artefakte und Zugriffsrechte. **Es flasht
+erst nach der ausdrücklich eingegebenen Bestätigung
+`FLASH-OPENNEXTION`.** Das vorhandene Geräteprogramm wird dabei ersetzt.
+Der Aufruf startet keine Neukompilierung, verändert keine Hermes-Dienste
+und verwendet kein WLAN-Token.
+
+Falls USB-Zugriffsrechte fehlen, zunächst nur diagnostizieren:
+
+```bash
+ls -l /dev/ttyUSB0
+id -nG
+```
+
+Nicht ungeprüft mit `sudo` flashen. Ein Gruppenwechsel (typischerweise
+`dialout`) wäre ein separater, bewusst ausgeführter Einrichtungsschritt.
+
+Nach erfolgreichem Flashen:
+- Display zeigt `HERMES TOUCH | TEST`.
+- `DEMO: WLAN deaktiviert` erscheint.
+- PSRAM und freier Heap haben sinnvolle Werte.
+- Der Button `Aktualisieren` erhöht den Touch-Zähler.
+- Serielle Debug-Ausgabe läuft mit 115200 Baud.
+
+Wenn Upload oder Start scheitert, zuerst den vollständigen seriellen
+Fehlerbericht bzw. ein Foto des Displays prüfen, bevor Einstellungen oder
+Pins geändert werden.
+
+## 6. Netzwerk erst im nächsten Schritt
 
 Zur Aktivierung der Live-Daten wird `Config.h.example` später lokal als `Config.h` kopiert. Ein konkreter privater Bridge-Endpunkt sowie ein Geräte-Token werden dann benötigt. `Config.h` ist in `.gitignore` aufgenommen und darf nicht nach GitHub gelangen.
 
