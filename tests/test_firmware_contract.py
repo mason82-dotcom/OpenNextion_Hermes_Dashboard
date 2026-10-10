@@ -49,6 +49,23 @@ class FirmwareContractTests(unittest.TestCase):
         self.assertIn("%u/%u Werte", FIRMWARE)
         self.assertNotIn("24 Punkte", FIRMWARE)
 
+    def test_lvgl_float_values_are_preformatted_safely(self):
+        # LVGL 8.x's built-in printf does not necessarily enable %f.
+        # Without this guard the device shows "f C" and corrupts
+        # subsequent variadic arguments (observed on real hardware).
+        self.assertIn("static void decimalText(", FIRMWARE)
+        self.assertIn("isfinite(value)", FIRMWARE)
+        self.assertIn("snprintf(out, cap,", FIRMWARE)
+        self.assertIn('lv_label_set_text_fmt(valueA, "%s C", numberText)', FIRMWARE)
+        self.assertIn('lv_label_set_text_fmt(valueB, "%s %%", numberText)', FIRMWARE)
+        self.assertIn('lv_label_set_text(valueC, numberText)', FIRMWARE)
+        self.assertIn('lv_label_set_text_fmt(historyValue, "Pi: %s C | %u/%u Werte"', FIRMWARE)
+        import re
+        fmt_calls = re.findall(r'lv_label_set_text_fmt\\([^;]*?\\);', FIRMWARE, re.S)
+        self.assertGreater(len(fmt_calls), 0)
+        for call in fmt_calls:
+            self.assertNotRegex(call, r'%(?:[0-9.+-]*)(?:f|e|g|F|E|G)')
+
     def test_no_chat_or_agent_write_actions(self):
         self.assertIn("CHAT IST DEAKTIVIERT", FIRMWARE)
         self.assertNotIn("http.POST(", FIRMWARE)
