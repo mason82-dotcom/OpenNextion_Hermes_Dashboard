@@ -5,6 +5,8 @@
  * No chat actions, no OTA, no Hermes agent configuration writes.
  */
 #include <Arduino.h>
+#include <math.h>
+#include <stdio.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <Arduino_GFX_Library.h>
@@ -389,6 +391,24 @@ static void pushHistory(int32_t sample) {
   if (historySampleCount < GRAPH_SAMPLES) ++historySampleCount;
 }
 
+// LVGL 8.3's lv_label_set_text_fmt() does not enable %f by default.
+// Convert floats to fixed-point digits using ONLY libc integer formatting;
+// then pass the completed text to LVGL via its supported %s conversion.
+static void decimalText(char *out, size_t cap, float value, uint8_t digits) {
+  if (cap == 0) return;
+  if (!isfinite(value) || fabsf(value) > 10000.0f ||
+      (digits != 1 && digits != 2)) {
+    snprintf(out, cap, "--");
+    return;
+  }
+  const int32_t scale = digits == 1 ? 10 : 100;
+  const int32_t scaled = (int32_t)lroundf(fabsf(value) * scale);
+  const long whole = (long)(scaled / scale);
+  const long fraction = (long)(scaled % scale);
+  const char *sign = value < 0.0f ? "-" : "";
+  snprintf(out, cap, "%s%ld.%0*ld", sign, whole, (int)digits, fraction);
+}
+
 static void sampleStatus() {
 #if HT_DEMO_MODE
   const unsigned long heapKb = ESP.getFreeHeap() / 1024;
@@ -474,21 +494,29 @@ static void sampleStatus() {
   } else {
     lv_label_set_text(statusHeadline, "KEINE AKTUELLEN PI-DATEN");
   }
+  char numberText[24];
   if (remoteValid && piTempKnown) {
-    lv_label_set_text_fmt(valueA, "%.1f C", piTemp);
+    decimalText(numberText, sizeof(numberText), piTemp, 1);
+    lv_label_set_text_fmt(valueA, "%s C", numberText);
     pushHistory((int32_t)constrain((int)piTemp, 0, 100));
-    lv_label_set_text_fmt(historyValue, "Pi: %.1f C | %u/%u Werte", piTemp,
+    lv_label_set_text_fmt(historyValue, "Pi: %s C | %u/%u Werte", numberText,
                           (unsigned)historySampleCount, (unsigned)GRAPH_SAMPLES);
   } else {
     lv_label_set_text(valueA, "--");
     lv_label_set_text(historyValue, "Keine gueltige Pi-Temperatur");
   }
-  if (remoteValid && piRamKnown)
-    lv_label_set_text_fmt(valueB, "%.1f %%", piRam);
-  else lv_label_set_text(valueB, "--");
-  if (remoteValid && piLoadKnown)
-    lv_label_set_text_fmt(valueC, "%.2f", piLoad);
-  else lv_label_set_text(valueC, "--");
+  if (remoteValid && piRamKnown) {
+    decimalText(numberText, sizeof(numberText), piRam, 1);
+    lv_label_set_text_fmt(valueB, "%s %%", numberText);
+  } else {
+    lv_label_set_text(valueB, "--");
+  }
+  if (remoteValid && piLoadKnown) {
+    decimalText(numberText, sizeof(numberText), piLoad, 2);
+    lv_label_set_text(valueC, numberText);
+  } else {
+    lv_label_set_text(valueC, "--");
+  }
   lv_label_set_text(statusFoot, remoteValid ? "Quelle: Raspberry Pi / Bridge" :
                                        "Quelle: Pi derzeit nicht erreichbar");
 #endif
