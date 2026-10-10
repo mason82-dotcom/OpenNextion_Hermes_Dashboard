@@ -50,7 +50,8 @@ jobs:
       - name: Compile connected branch with placeholder config
         run: |
           cp firmware/HermesTouch/Config.h.example firmware/HermesTouch/Config.h
-          trap 'rm -f firmware/HermesTouch/Config.h' EXIT
+          cp firmware/HermesTouch/LocalCa.h.example firmware/HermesTouch/LocalCa.h
+          trap 'rm -f firmware/HermesTouch/Config.h firmware/HermesTouch/LocalCa.h' EXIT
           arduino-cli compile \
             --clean \
             --fqbn 'esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB' \
