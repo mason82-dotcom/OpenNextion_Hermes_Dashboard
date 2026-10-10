@@ -1,6 +1,6 @@
 # Hermes Touch v0.6: sichere Pi-Livedaten über HTTPS/TLS
 
-**Auf echter Hardware bestätigt:** v0.6 nutzt erfolgreich WLAN/HTTPS zur Pi-Bridge. Vier fotografierte Bildschirmseiten zeigen `HERMES-API ERREICHBAR`, `Dashboard: OK | Gateway: ON`, eine reale CPU-Temperaturkurve und den weiterhin gesperrten Chat. Bei der ersten v0.6-Version trat ein **LVGL-Formatierungsfehler bei Fließkommawerten** auf (`f C`, `f %`, korrupte Diagrammbeschriftung). Der daraufhin eingecheckte Fix muss erst neu kompiliert und auf dem OpenNextion überprüft werden.
+**Auf echter Hardware bestätigt:** v0.6 nutzt erfolgreich WLAN/HTTPS zur Pi-Bridge. Vier fotografierte Bildschirmseiten zeigen `HERMES-API ERREICHBAR`, `Dashboard: OK | Gateway: ON`, eine reale CPU-Temperaturkurve und den weiterhin gesperrten Chat. Bei der ersten v0.6-Version trat ein **LVGL-Formatierungsfehler bei Fließkommawerten** auf (`f C`, `f %`, korrupte Diagrammbeschriftung). Der Fix wurde inzwischen neu kompiliert, geflasht und mit korrekt angezeigten Dezimalwerten auf der echten Hardware bestätigt.
 
 ## Architektur / Sicherheitsgrenzen
 
@@ -150,7 +150,7 @@ bash scripts/pi/firmware-upload-connected.sh \
 
 Das Upload-Skript verwendet **ausschließlich** `build/firmware-connected/`, prüft aktuelle Konfiguration/Binärartefakte sowie den TLS-Smoketest und erfordert die interaktive Eingabe `FLASH-HERMES-TLS`. Es ersetzt dann die vorhandene Offline-Testfirmware. Es ist nicht möglich, versehentlich mit dem Offline-Build-Verzeichnis weiterzufahren.
 
-**Wichtig:** Das verbundene Firmware-Binary enthält das lokale WLAN-Passwort und den Bridge-Token; das gesamte `build/`-Verzeichnis darf nicht veröffentlicht oder geteilt werden.
+**Wichtig:** Das verbundene Firmware-Binary enthält das lokale WLAN-Passwort und den **separaten HTTPS-Geräte-Token**; das gesamte `build/`-Verzeichnis darf nicht veröffentlicht oder geteilt werden.
 
 ## 6. Beobachtungen nach dem Flash
 
@@ -158,13 +158,13 @@ Auf **STATUS** werden Pi-CPU-Temperatur, Pi-RAM, Systemlast und Hermes-API-Statu
 
 Eine fehlgeschlagene Zertifikatsprüfung, fehlende Netzwerkverbindung, fehlender NTP-Sync oder ungültiges Token muss zu **keinen aktuellen Pi-Daten** führen, nicht zu erfundenen Werten.
 
-### v0.6-Hardwarebefund: Fließkommaformatierung in LVGL korrigieren
+### v0.6-Hardwarebefund: Fließkommaformatierung in LVGL erfolgreich korrigiert
 
 Am OpenNextion wurden zunächst auf der **STATUS**-Seite `f C`, `f %` und `f` statt numerischer Werte angezeigt. Auf der **GRAPH**-Seite war die Messkurve plausibel, während die Beschriftung große falsche Zähler enthielt. Ursache ist die standardmäßig fehlende `%f`-Unterstützung bei `lv_label_set_text_fmt()` in LVGL 8.3; zudem kann diese einen nachfolgenden Argumentversatz auslösen.
 
 Der Fix formatiert Pi-CPU, Pi-RAM und Pi-Load über eine validierte, begrenzte Festkomma-Konvertierung mit C++-Ganzzahlformaten (`std::isfinite`, `snprintf`) und übergibt die Ergebnisse als `%s` an LVGL. Die Chat-Sperre, TLS-CA, PIN-Belegung und Konfiguration bleiben unangetastet.
 
-**Nächste Schritte mit vorhandener privater `Config.h` und `LocalCa.h`:**
+**Für spätere Änderungen mit vorhandener privater `Config.h` und `LocalCa.h`:**
 
 ```bash
 cd ~/Projekte/OpenNextion_Hermes_Dashboard
@@ -174,14 +174,14 @@ bash scripts/pi/tls-smoke.sh
 bash scripts/pi/firmware-build-connected.sh
 ```
 
-Nur bei Erfolg und nach erneuter Kontrolle des tatsächlichen USB-Geräts die Firmware mit `bash scripts/pi/firmware-upload-connected.sh /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0` manuell übertragen. Danach überprüfen, ob z. B. `51.2 C`, `62.8 %`, `0.53` und `Pi: 51.2 C | x/24 Werte` dargestellt werden. Das sind **Beispielwerte**, keine aktuellen Live-Messungen.
+Nur bei Erfolg und nach erneuter Kontrolle des tatsächlichen USB-Geräts die Firmware mit `bash scripts/pi/firmware-upload-connected.sh /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0` manuell übertragen. Diese Prüfung wurde inzwischen auf dem realen Display bestanden: Die Statusseite zeigte `51.8 C`, `62.8 %` und `0.71`; die Graph-Seite `Pi: 52.9 C | 12/24 Werte`. Diese Angaben sind dokumentierte Momentaufnahmen und keine statischen Vorgaben.
 
-Es müssen **keine neuen Zertifikate und keine neuen WLAN-Schlüssel erstellt werden**. Die existierende `Config.h` wird wiederverwendet; der private verbundene Build muss nach dem Quellcode-Fix neu erstellt werden.
+Es müssen **keine neuen Zertifikate und keine neuen WLAN-Schlüssel erstellt werden**. Die existierende `Config.h` wird wiederverwendet; der private verbundene Build wurde nach dem Quellcode-Fix erneut erstellt und auf dem Gerät getestet.
 
 ## Fehlerdiagnose und Grenzen
 
 - **TLS-Verbindung scheitert:** Datum/Uhrzeit auf ESP32, Cert-SAN/IP, CA-Header, Pi-LAN-Bindung und Firewall prüfen.
-- **HTTP 401:** Gerätetoken stimmt nicht mit `config/bridge.env` überein.
+- **HTTP 401:** Der separate HTTPS-Geräte-Token stimmt nicht mit `HERMES_TOUCH_DEVICE_TOKEN` in der lokalen `config/tls.env` überein.
 - **HTTP 503:** lokaler Bridge-Prozess unter 127.0.0.1:8765 läuft nicht.
 - **Zeitanzeige/NTP ausstehend:** DNS/UDP-123 für ESP32 prüfen; nicht `setInsecure()` aktivieren.
 - **HTTP im Config.h:** absichtlich abgelehnt.
