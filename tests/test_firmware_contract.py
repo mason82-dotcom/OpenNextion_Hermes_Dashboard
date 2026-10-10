@@ -12,6 +12,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SKETCH = ROOT / "firmware" / "HermesTouch" / "HermesTouch.ino"
 FIRMWARE = SKETCH.read_text(encoding="utf-8")
+WORKER = (SKETCH.parent / "TelemetryWorker.h").read_text(encoding="utf-8")
 
 
 class FirmwareContractTests(unittest.TestCase):
@@ -20,18 +21,56 @@ class FirmwareContractTests(unittest.TestCase):
         self.assertIn("#define HT_DEMO_MODE 1", FIRMWARE)
 
     def test_network_dependencies_conditional(self):
-        self.assertIn("#if !HT_DEMO_MODE\n#include <WiFi.h>", FIRMWARE)
-        self.assertIn('#include <HTTPClient.h>', FIRMWARE)
-        self.assertIn('#include <WiFiClientSecure.h>', FIRMWARE)
-        self.assertIn('#include "LocalCa.h"', FIRMWARE)
-        self.assertIn('#include <ArduinoJson.h>', FIRMWARE)
+        self.assertIn('#if !HT_DEMO_MODE\n#include "TelemetryWorker.h"', FIRMWARE)
+        for name in ("<WiFi.h>", "<HTTPClient.h>",
+                     "<WiFiClientSecure.h>", "<ArduinoJson.h>", '"LocalCa.h"'):
+            self.assertIn("#include " + name, WORKER)
+        # Offline sketches never include/compile the worker dependencies.
+        self.assertNotIn("#include <WiFi.h>", FIRMWARE)
 
     def test_https_only_and_no_tls_bypass(self):
-        self.assertIn('base.startsWith("https://")', FIRMWARE)
-        self.assertIn("client.setCACert(HT_CA_CERT)", FIRMWARE)
-        self.assertIn("configTime(0, 0,", FIRMWARE)
-        self.assertNotIn("setInsecure(", FIRMWARE)
-        self.assertNotIn("WiFiClient client;", FIRMWARE)
+        self.assertIn('urlBase.startsWith("https://")', WORKER)
+        self.assertIn("client.setCACert(HT_CA_CERT)", WORKER)
+        self.assertIn("configTime(0, 0,", WORKER)
+        self.assertIn("HTTPC_DISABLE_FOLLOW_REDIRECTS", WORKER)
+        self.assertNotIn("setInsecure(", FIRMWARE + WORKER)
+        self.assertNotIn("WiFiClient client;", FIRMWARE + WORKER)
+
+    def test_network_worker_isolated_from_lvgl(self):
+        self.assertIn("static void telemetryTask(void *)", WORKER)
+        self.assertIn("xTaskCreate(telemetryTask", WORKER)
+        self.assertIn("xSemaphoreCreateMutex()", WORKER)
+        self.assertIn("xSemaphoreTake(telemetryMutex, 0)", WORKER)
+        self.assertIn("telemetryPublish(snapshot)", WORKER)
+        self.assertIn("telemetryReadSnapshot(incoming)", FIRMWARE)
+        self.assertIn("telemetryRequestRefresh()", FIRMWARE)
+        self.assertNotIn("lv_", WORKER)
+        self.assertNotIn("gfx->", WORKER)
+        # HTTPS must not block the LVGL thread.
+        self.assertNotIn("http.GET()", FIRMWARE)
+        self.assertNotIn("WiFi.reconnect()", FIRMWARE)
+        self.assertNotIn("WiFi.status()", FIRMWARE)
+
+    def test_connected_ui_marks_stale_and_deduplicates_chart(self):
+        self.assertIn("TELEMETRY_FRESH_MS", WORKER)
+        self.assertIn("latest.hasLastGood && age <= TELEMETRY_FRESH_MS", FIRMWARE)
+        self.assertIn("PI DATEN VERALTET", FIRMWARE)
+        self.assertIn("Keine aktuellen Pi-Temperaturwerte", FIRMWARE)
+        self.assertIn("lastChartSequence", FIRMWARE)
+        self.assertIn("latest.sequence != lastChartSequence", FIRMWARE)
+        self.assertIn("Pi/TLS | vor %lu s", FIRMWARE)
+        self.assertIn("14336, nullptr, 1, &telemetryTaskHandle", WORKER)
+        self.assertIn("ulTaskNotifyTake(pdTRUE,", WORKER)
+
+    def test_device_worker_remains_read_only(self):
+        self.assertIn('urlBase + "/v1/status"', WORKER)
+        self.assertIn("http.GET()", WORKER)
+        self.assertNotIn("http.POST(", WORKER)
+        self.assertNotIn("http.PUT(", WORKER)
+        self.assertNotIn("http.DELETE(", WORKER)
+        self.assertNotIn("http.PATCH(", WORKER)
+        self.assertNotIn("HT_HERMES_API_KEY", WORKER)
+        self.assertIn("DeserializationOption::NestingLimit(8)", WORKER)
 
     def test_four_touch_pages(self):
         self.assertIn("PAGE_COUNT = 4", FIRMWARE)
