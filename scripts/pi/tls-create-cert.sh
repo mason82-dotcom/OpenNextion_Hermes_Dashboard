@@ -53,13 +53,9 @@ openssl x509 -req -sha256 -days 365 \
   -in "$TMP/server.csr" -CA "$TMP/ca.crt" -CAkey "$TMP/ca.key" \
   -CAcreateserial -extfile "$TMP/server.ext" \
   -out "$TMP/server.crt" >/dev/null 2>&1
-openssl verify -CAfile "$TMP/ca.crt" "$TMP/server.crt" >/dev/null
-python3 - "$IP" "$TMP/server.crt" <<'PY'
-import ipaddress, ssl, sys
-ip = ipaddress.ip_address(sys.argv[1])
-cert = ssl._ssl._test_decode_cert(sys.argv[2])
-ssl.match_hostname(cert, str(ip))
-PY
+# OpenSSL validates BOTH the signed chain and the IP subjectAltName.
+# Python 3.13 no longer exposes ssl.match_hostname.
+openssl verify -verify_ip "$IP" -CAfile "$TMP/ca.crt" "$TMP/server.crt" >/dev/null
 
 mkdir -p "$PKI"
 install -m 600 "$TMP/ca.key" "$PKI/ca.key"
