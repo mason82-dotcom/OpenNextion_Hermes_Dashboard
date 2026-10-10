@@ -33,9 +33,9 @@ if ! command -v arduino-cli >/dev/null 2>&1; then
 fi
 mkdir -p "$BUILD" "$LOG_DIR"
 chmod 700 "$BUILD" "$LOG_DIR"
-printf 'Compiling connected TLS firmware with a clean build...\n'
+printf 'Compiling connected TLS firmware using the incremental Arduino build cache...\n'
 printf 'No passwords, tokens or private certificates will be printed.\n'
-if arduino-cli compile --clean --fqbn "$FQBN" \
+if arduino-cli compile --fqbn "$FQBN" \
      --build-path "$BUILD" "$SKETCH" > "$LOG" 2>&1; then
   printf 'CONNECTED COMPILE OK. Artifacts kept private in build/firmware-connected.\n'
   printf 'Application binary: %s\n' "$BUILD/HermesTouch.ino.bin"
