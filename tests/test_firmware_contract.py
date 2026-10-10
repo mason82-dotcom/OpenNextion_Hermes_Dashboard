@@ -60,6 +60,8 @@ class FirmwareContractTests(unittest.TestCase):
         self.assertIn("latest.sequence != lastChartSequence", FIRMWARE)
         self.assertIn("Pi/TLS | vor %lu s", FIRMWARE)
         self.assertIn("14336, nullptr, 1, &telemetryTaskHandle", WORKER)
+        self.assertIn("telemetryStarted = telemetryStart()", FIRMWARE)
+        self.assertIn("if (!telemetryStarted) latest.phase = TelemetryPhase::TASK_FAILED", FIRMWARE)
         self.assertIn("ulTaskNotifyTake(pdTRUE,", WORKER)
 
     def test_device_worker_remains_read_only(self):
