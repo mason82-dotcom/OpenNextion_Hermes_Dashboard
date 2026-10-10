@@ -47,13 +47,31 @@ class TestBridge(unittest.TestCase):
         self.assertEqual(code, 401)
 
     def test_status(self):
-        with patch.object(module, "dashboard_probe", return_value={"dashboard_reachable": False, "version": None}):
+        with patch.object(module, "dashboard_probe", return_value={"dashboard_reachable": False, "version": None}), \
+             patch.object(module, "api_health_probe", return_value={"api_reachable": True, "api_healthy": True}):
             code, data = self.req(token=module.TOKEN)
         self.assertEqual(code, 200)
         self.assertIn("system", data)
         self.assertEqual(data["schema_version"], 1)
         self.assertFalse(data["chat"]["enabled"])
         self.assertFalse(data["hermes"]["dashboard_reachable"])
+        self.assertTrue(data["hermes"]["api_healthy"])
+
+    def test_api_health_success(self):
+        import io
+        from unittest.mock import MagicMock
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"status":"ok"}'
+        with patch.object(module, "urlopen", return_value=response) as open_mock:
+            probe = module.api_health_probe()
+        self.assertEqual(probe, {"api_reachable": True, "api_healthy": True})
+        self.assertTrue(open_mock.call_args.args[0].full_url.endswith("/health"))
+
+    def test_api_health_offline(self):
+        from urllib.error import URLError
+        with patch.object(module, "urlopen", side_effect=URLError("refused")):
+            self.assertEqual(module.api_health_probe(),
+                             {"api_reachable": False, "api_healthy": False})
 
     def test_admin_absent(self):
         code, data = self.req(path="/v1/admin", token=module.TOKEN)
