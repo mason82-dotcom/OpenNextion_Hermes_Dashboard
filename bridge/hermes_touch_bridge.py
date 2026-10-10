@@ -20,6 +20,7 @@ HOST = os.environ.get("HERMES_TOUCH_BIND", "127.0.0.1")
 PORT = int(os.environ.get("HERMES_TOUCH_PORT", "8765"))
 TOKEN = os.environ.get("HERMES_TOUCH_TOKEN", "")
 DASHBOARD_URL = os.environ.get("HERMES_DASHBOARD_URL", "http://127.0.0.1:9119").rstrip("/")
+API_URL = os.environ.get("HERMES_API_URL", "http://127.0.0.1:8642").rstrip("/")
 
 
 def optional_number(path: str, divisor: float = 1.0, decimals: int = 1):
@@ -66,12 +67,27 @@ def dashboard_probe():
         return {"dashboard_reachable": False, "version": None}
 
 
+def api_health_probe():
+    """Probe the official public /health route, not a model inference request.
+
+    Healthy API != authenticated model access or full gateway readiness.
+    """
+    try:
+        req = Request(API_URL + "/health", headers={"Accept": "application/json"})
+        with urlopen(req, timeout=1.0) as r:
+            payload = json.loads(r.read(4096))
+            return {"api_reachable": True,
+                    "api_healthy": isinstance(payload, dict) and payload.get("status") == "ok"}
+    except (URLError, HTTPError, TimeoutError, OSError, ValueError):
+        return {"api_reachable": False, "api_healthy": False}
+
+
 def status_payload():
     return {
         "ok": True,
         "schema_version": 1,
         "system": system_snapshot(),
-        "hermes": dashboard_probe(),
+        "hermes": {**dashboard_probe(), **api_health_probe()},
         "chat": {"enabled": False},
     }
 
