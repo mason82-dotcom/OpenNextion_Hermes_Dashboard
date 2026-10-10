@@ -2,7 +2,7 @@
 
 **Hermes Touch** – ESP32-S3 Touchscreen für den vorhandenen Hermes-Agent auf dem Raspberry Pi 5.
 
-**Stand: v0.6 – HTTPS-Liveanbindung auf echter Hardware bestätigt.** Vier Bildschirmseiten, Hermes-API-, Dashboard- und Gateway-Status sowie eine echte Pi-Temperaturkurve wurden auf dem ONX3248G035 fotografisch bestätigt. Ein sichtbarer LVGL-Fließkommaformatierungsfehler bei CPU/RAM/Load und Graph-Beschriftung wurde anschließend im Code korrigiert; **dieser Fix muss neu gebaut und am Gerät geprüft werden**. Zertifikatsvalidierung und read-only Bridge funktionieren.
+**Stand: v0.6 – HTTPS-Liveanbindung auf echter Hardware bestätigt.** Vier Bildschirmseiten, Hermes-API-, Dashboard- und Gateway-Status sowie eine echte Pi-Temperaturkurve wurden auf dem ONX3248G035 fotografisch bestätigt. Der anfängliche LVGL-Fließkommaformatierungsfehler wurde korrigiert, neu kompiliert und **mit korrekt angezeigten Dezimalwerten und einer beschrifteten Live-Kurve auf dem ONX3248G035 bestätigt**. Zertifikatsvalidierung und Read-only-Bridge funktionieren.
 
 ## Architektur
 
@@ -75,7 +75,7 @@ Dieses Upload-Skript erfordert eine ausdrückliche Bestätigung. Die bereits ins
 
 Der Client im verbundenen Modus verwendet jetzt **ausschließlich HTTPS/TLS** und prüft das Serverzertifikat gegen die lokal generierte CA, den Servernamen beziehungsweise die IP-Adresse und die TLS-Gültigkeit nach NTP-Zeitabgleich. Es gibt keinen `setInsecure()`- oder HTTP-Rückfall. Der TLS-Server auf dem Pi akzeptiert nur `GET /v1/status` mit einem **separaten HTTPS-Geräte-Token**, der sich vom lokalen Bridge-Token unterscheidet.
 
-**Live auf dem OpenNextion getestet:** HTTPS-Kommunikation, Hermes-Status und CPU-Diagramm funktionieren. Die erste v0.6-Firmware zeigte fehlerhafte Fließkomma-Labels (`f C`, `f %`); ein Quellcode-Fix nutzt jetzt Ganzzahlformatierung plus `%s` und ist noch neu zu kompilieren/flashen.
+**Live auf dem OpenNextion getestet:** HTTPS-Kommunikation, Hermes-Status und CPU-Diagramm funktionieren. Die erste v0.6-Firmware zeigte fehlerhafte Fließkomma-Labels (`f C`, `f %`). Der Fix mit Festkomma-Zahlenformatierung plus `%s` wurde anschließend erfolgreich auf der Hardware getestet: Statusseite `51.8 C`, `62.8 %`, `0.71`; Graphseite `Pi: 52.9 C | 12/24 Werte` (Momentaufnahmen, keine fest hinterlegten Werte).
 
 **Anleitung:** [TLS-Live-Setup](docs/TLS-LIVE-SETUP.md).
 
@@ -105,8 +105,8 @@ Siehe [docs/PI-SETUP.md](docs/PI-SETUP.md). Die Dateien können auf dem Pi per `
 
 - v0.1–v0.3: read-only Python-Bridge auf dem Pi, Hermes-API- und Dashboard-Healthchecks, Status-Endpunkt und automatisierte Tests
 - v0.4: nachweislich erfolgreicher ESP32-S3-Clean-Build; Display und Touch auf realer ONX3248G035-Hardware getestet
-- v0.5: vier LVGL-Touchseiten, lokaler Messverlauf, Systemseite und gesperrter Chat-Platzhalter – **fotografisch auf dem ONX3248G035 bestätigt**; kleinere Zähler-Korrektur noch zu testen
-- v0.6: IP-SAN-HTTPS-Statusdienst, separate Geräteauthentifizierung, NTP-/CA-Prüfung – **auf Pi und ESP32 bestätigt**; Nachtest der LVGL-Zahlenformatierung ausstehend
-- Nächste Etappe: korrigierte numerische Statuswerte und Diagrammbeschriftung testen; anschließend HTTP-Abfragen entkoppeln, Stabilitätsmessungen und gesperrten Chat beibehalten
+- v0.5: vier LVGL-Touchseiten, lokaler Messverlauf, Systemseite und gesperrter Chat-Platzhalter – **fotografisch auf dem ONX3248G035 bestätigt**, einschließlich der tatsächlichen Graph-Zählung
+- v0.6: IP-SAN-HTTPS-Statusdienst, separate Geräteauthentifizierung, NTP-/CA-Prüfung – **auf Pi und ESP32 bestätigt**, einschließlich korrigierter Zahlenformatierung und Temperaturkurve
+- Nächste Etappe: HTTPS-Abfragen in einen Hintergrundtask verlagern, um Touch-Blockaden bei langsamen Netzen zu vermeiden; Stabilität, Fehlerzustände und die Chat-Sperre weiter prüfen
 
 Lizenz: noch festzulegen.
