@@ -37,7 +37,7 @@ def main():
     tls = read_config(ROOT / "config" / "tls.env")
     if bridge.get("HERMES_TOUCH_BIND", "127.0.0.1") != "127.0.0.1":
         raise SystemExit("The unencrypted local bridge must bind only to 127.0.0.1")
-    token = bridge.get("HERMES_TOUCH_TOKEN", "")
+    token = tls.get("HERMES_TOUCH_DEVICE_TOKEN", "")
     host = tls.get("HERMES_TOUCH_TLS_BIND", "")
     port = tls.get("HERMES_TOUCH_TLS_PORT", "8766")
     if len(token) < 24 or not host or not port.isdigit():
@@ -61,7 +61,7 @@ def main():
     fd = os.open(str(OUT), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as fp:
         fp.write(config)
-    print("Created local Config.h (mode 0600), containing the read-only device token.")
+    print("Created local Config.h (mode 0600), containing the read-only HTTPS device token.")
     print("No credentials printed or uploaded. This token will be embedded in device flash.")
     print("Next: bash scripts/pi/firmware-build-connected.sh")
 
