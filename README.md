@@ -249,6 +249,6 @@ Siehe [docs/PI-SETUP.md](docs/PI-SETUP.md). Die Dateien können auf dem Pi per `
 - v0.8.4: Landscape 480×320 mit SPRACHE-Tab und festem CST826-T1-Mapping – **Touch auf Hardware abgenommen**
 - Robustheit TLS-Dienst: TLS-Handshake jetzt pro Verbindung im Worker-Thread mit 10-s-Timeout. Vorher konnte eine einzige hängende TCP-Verbindung (Portscan, ESP32 verliert WLAN mitten im Handshake) den Dienst auf Port 8766 dauerhaft blockieren. Nach `git pull` den TLS-Prozess neu starten; Firmware unverändert
 - Autostart: Bridge und TLS-Dienst als systemd-User-Units mit automatischem Neustart
-- Schnellbefehl-Chat (opt-in): CHAT-Tab mit bis zu sechs auf dem Pi freigegebenen Befehlen, Antworten nur im RAM – **Quellcode, Tests und Compile mit allen Optionen ok; Hardwareabnahme steht aus**
+- Schnellbefehl-Chat (opt-in): CHAT-Tab mit bis zu sechs auf dem Pi freigegebenen Befehlen, Antworten nur im RAM – **177 Tests, Connected-Build und Hardware bestätigt** (HERMES, PI-STATUS, WITZ beantwortet; SPRACHE-Tab parallel funktionsfähig)
 
 Lizenz: noch festzulegen.

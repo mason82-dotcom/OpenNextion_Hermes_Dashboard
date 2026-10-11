@@ -82,6 +82,15 @@ Netzwerk-Task; die Oberfläche wartet nie auf HTTPS.
 
 ## Abnahme auf Hardware
 
+**Bestätigt am 11.10.2026** auf dem ONX3248G035 (Connected-Build mit Mikrofon,
+Lautsprecher und Schnellbefehlen): fünf Knöpfe aus `chat-prompts.json`,
+Antworten auf HERMES, PI-STATUS und WITZ nach ca. 4–10 s im Verlauf,
+Status `ANTWORT DA`, `TLS OK`; SPRACHE-Tab (Mikrofon 38 %, PTT 3,1 s mit
+100 % Anteil, Lautsprecher bereit) arbeitet parallel. Der Limit-Test
+(Schritt 3) steht noch aus; serverseitig ist er durch Tests abgedeckt.
+
+Prüfschritte:
+
 1. CHAT-Tab zeigt die Knöpfe aus `chat-prompts.json` (Beschriftung = `label`).
 2. `WITZ` antippen → `HERMES ARBEITET …` → Antwort oben im Verlauf.
 3. Sofort erneut tippen → `FEHLER: LIMIT: WARTEN`.
