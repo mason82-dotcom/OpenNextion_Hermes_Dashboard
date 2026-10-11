@@ -42,7 +42,8 @@ class TestChatUiShell(unittest.TestCase):
     def test_chat_all_widgets_fit_before_navigation(self):
         # Page inner coordinate area: 320 x 352, bottom navigation follows.
         for x, y, w, h in (
-            (10, 64, 300, 195),
+            (10, 64, 300, 155),
+            (10, 231, 300, 35),
             (10, 273, 215, 48),
             (233, 273, 77, 48),
         ):
@@ -51,10 +52,23 @@ class TestChatUiShell(unittest.TestCase):
                 self.assertLessEqual(x + w, 320)
                 self.assertLessEqual(y + h, 352)
         self.assertIn("lv_obj_set_pos(chatHistory, 10, 64)", CHAT)
-        self.assertIn("lv_obj_set_size(chatHistory, 300, 195)", CHAT)
+        self.assertIn("lv_obj_set_size(chatHistory, 300, 155)", CHAT)
+        self.assertIn("lv_obj_t *micCard = card(p, 10, 231, 300, 35)", CHAT)
         self.assertIn("lv_obj_set_pos(chatInput, 10, 273)", CHAT)
         self.assertIn("lv_obj_set_pos(chatSend, 233, 273)", CHAT)
         self.assertIn("lv_obj_set_size(chatSend, 77, 48)", CHAT)
+
+    def test_composer_is_visually_disabled_not_white(self):
+        self.assertIn("lv_obj_set_style_bg_color(chatInput, lv_color_hex(0x24374D)", CHAT)
+        self.assertIn("LV_PART_MAIN | LV_STATE_DISABLED", CHAT)
+        self.assertIn("lv_obj_set_style_bg_color(chatSend, lv_color_hex(0x20334C)", CHAT)
+
+    def test_microphone_meter_only_shows_local_aggregate(self):
+        self.assertIn("chatMicBar = lv_bar_create(micCard)", CHAT)
+        self.assertIn("lv_bar_set_range(chatMicBar, 0, 100)", CHAT)
+        self.assertIn('"MIC: AUS (nur lokal)"', CHAT)
+        self.assertIn('"MIC: STARTET (lokal)"', CHAT)
+        self.assertNotIn("micLevelI2S", CHAT)
 
     def test_no_new_network_write_surface(self):
         self.assertIn('urlBase + "/v1/status"', WORKER)
