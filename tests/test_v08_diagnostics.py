@@ -14,8 +14,8 @@ WORKER = (ROOT / "firmware/HermesTouch/TelemetryWorker.h").read_text(encoding="u
 
 class V08DiagnosticsTests(unittest.TestCase):
     def test_version_bumped_only_in_candidate_firmware(self):
-        self.assertIn('label(screen, "v0.8.1 | ONX3248G035"', FIRMWARE)
-        self.assertIn("Hermes Touch v0.8.1 (candidate)", FIRMWARE)
+        self.assertIn('label(screen, "v0.8.2 | ONX3248G035"', FIRMWARE)
+        self.assertIn("Hermes Touch v0.8.2 (candidate)", FIRMWARE)
 
     def test_heap_minimum_is_real_esp32_measurement(self):
         self.assertIn("ESP.getFreeHeap()", FIRMWARE)
