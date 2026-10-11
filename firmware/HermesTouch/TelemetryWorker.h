@@ -26,6 +26,9 @@ struct TelemetrySnapshot {
   bool hasLastGood = false;
   uint32_t lastSuccessMs = 0;
   uint32_t sequence = 0;
+  // ESP-IDF FreeRTOS high-water mark: minimum remaining stack in bytes.
+  // Measured inside the worker; never read its task state from LVGL.
+  uint32_t workerStackMinFreeBytes = 0;
   bool apiHealthy = false;
   bool dashboardAvailable = false;
   bool gatewayKnown = false;
@@ -153,6 +156,9 @@ static void telemetryTask(void *) {
       lastWiFiAttempt = millis();
     }
     telemetryPoll(snapshot);
+    // ESP-IDF reports task stack high-water mark in BYTES, not words.
+    // Query from this task only, after the potentially stack-heavy TLS poll.
+    snapshot.workerStackMinFreeBytes = (uint32_t)uxTaskGetStackHighWaterMark(nullptr);
     telemetryPublish(snapshot);
     // The LVGL thread may wake the worker immediately after a touch.
     ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(TELEMETRY_PERIOD_MS));
