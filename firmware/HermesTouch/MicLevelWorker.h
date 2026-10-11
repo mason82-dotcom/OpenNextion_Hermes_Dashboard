@@ -11,6 +11,7 @@
 #include <cstring>
 #include <math.h>
 #include "BoardConfig.h"
+#include "MicAudioMetrics.h"
 
 static constexpr uint32_t MIC_SAMPLE_RATE = 16000;
 static constexpr size_t MIC_PCM_SAMPLES = 256;
@@ -35,6 +36,16 @@ struct MicLevelSnapshot {
   MicPttPhase pttPhase = MicPttPhase::READY;
   uint32_t pttDurationMs = 0;
   uint32_t pttSamples = 0; // only a count, never a PCM pointer
+  // Aggregate diagnostics only; NEVER a recording, PCM pointer or waveform.
+  uint16_t pttRms = 0;
+  uint16_t pttPeak = 0;
+  uint8_t pttClipPct = 0;
+  uint32_t pttRateHz = 0; // observed buffer-fill throughput, not I2S clock
+  uint8_t pttCoveragePct = 0; // approximate share of expected 16k samples
+  bool pttMemoryValid = false;
+  uint32_t pttPsramBeforeKB = 0;
+  uint32_t pttPsramMinKB = 0;
+  uint32_t pttPsramAfterKB = 0;
 };
 
 static SemaphoreHandle_t micLevelMutex = nullptr;
@@ -97,6 +108,11 @@ static void micLevelTask(void *) {
   MicPttPhase pttPhase = MicPttPhase::READY;
   uint32_t pttDurationMs = 0;
   uint32_t pttLastSamples = 0;
+  MicAudioMetrics pttMetrics; // worker-only aggregates; no raw PCM here
+  uint32_t pttPsramBeforeBytes = 0;
+  uint32_t pttPsramMinBytes = 0;
+  uint32_t pttPsramAfterBytes = 0;
+  bool pttMemoryValid = false;
   for (;;) {
     const uint32_t startLoopMs = millis();
     const bool held = micPttHeld.load(std::memory_order_acquire);
@@ -111,13 +127,16 @@ static void micLevelTask(void *) {
                           MIC_PTT_MAX_MS);
       pttLastSamples = (uint32_t)pttSamples;
       micPttDiscard(pttAudio, pttSamples);
+      pttPsramAfterBytes = ESP.getFreePsram();
       pttSamples = 0;
       pttPhase = expired ? MicPttPhase::TIMEOUT : MicPttPhase::DISCARDED;
       pttArmed = !held;
     }
     if (pttAudio == nullptr && held && pttArmed && failedReads == 0) {
       pttArmed = false;
-      // Fail closed if PSRAM cannot provide a full bounded buffer.
+      // Manufacturer 07_microphone_test also buffers in PSRAM. We never
+      // fall back to internal heap, and measure memory before allocation.
+      pttPsramBeforeBytes = ESP.getFreePsram();
       pttAudio = static_cast<int16_t *>(heap_caps_malloc(
           MIC_PTT_MAX_SAMPLES * sizeof(int16_t),
           MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
@@ -125,11 +144,17 @@ static void micLevelTask(void *) {
         pttPhase = MicPttPhase::NO_PSRAM;
         pttDurationMs = 0;
         pttLastSamples = 0;
+        pttMemoryValid = false;
+        pttMetrics = MicAudioMetrics{};
       } else {
         pttStartedMs = startLoopMs;
         pttSamples = 0;
         pttLastSamples = 0;
         pttDurationMs = 0;
+        pttMetrics = MicAudioMetrics{};
+        pttMemoryValid = true;
+        pttPsramMinBytes = ESP.getFreePsram();
+        pttPsramAfterBytes = 0; // "after" unavailable while recording
         pttPhase = MicPttPhase::RECORDING;
       }
     }
@@ -143,12 +168,18 @@ static void micLevelTask(void *) {
       if (failedReads >= 3) {
         // Read failure must discard previously buffered audio too.
         micPttDiscard(pttAudio, pttSamples);
+        pttPsramAfterBytes = ESP.getFreePsram();
         pttSamples = 0;
         pttArmed = false; // require finger release before trying again
         pttPhase = MicPttPhase::ERROR;
         MicLevelSnapshot failed;
         failed.failed = true;
         failed.pttPhase = pttPhase;
+        failed.pttSamples = pttLastSamples;
+        failed.pttDurationMs = pttDurationMs;
+        failed.pttRms = micMetricsRms(pttMetrics);
+        failed.pttPeak = pttMetrics.peak;
+        failed.pttClipPct = micMetricsClippedPercent(pttMetrics);
         micLevelPublish(failed);
       }
       // Clear samples even when an I2S read was partial/failed.
@@ -177,6 +208,8 @@ static void micLevelTask(void *) {
     const uint32_t nowMs = millis();
     const bool heldNow = micPttHeld.load(std::memory_order_acquire);
     if (pttAudio != nullptr) {
+      const uint32_t freePsram = ESP.getFreePsram();
+      if (freePsram < pttPsramMinBytes) pttPsramMinBytes = freePsram;
       const uint32_t age = (uint32_t)(nowMs - pttStartedMs);
       if (!heldNow || age >= MIC_PTT_MAX_MS ||
           pttSamples >= MIC_PTT_MAX_SAMPLES) {
@@ -185,6 +218,7 @@ static void micLevelTask(void *) {
         const bool expired = age >= MIC_PTT_MAX_MS ||
                              pttSamples >= MIC_PTT_MAX_SAMPLES;
         micPttDiscard(pttAudio, pttSamples);
+        pttPsramAfterBytes = ESP.getFreePsram();
         pttSamples = 0;
         pttPhase = expired ? MicPttPhase::TIMEOUT : MicPttPhase::DISCARDED;
         pttArmed = !heldNow;
@@ -192,11 +226,13 @@ static void micLevelTask(void *) {
         const size_t left = MIC_PTT_MAX_SAMPLES - pttSamples;
         const size_t take = min(count, left);
         memcpy(pttAudio + pttSamples, pcm, take * sizeof(int16_t));
+        micMetricsAccumulate(pttMetrics, pcm, take); // only stored samples
         pttSamples += take;
         pttDurationMs = age;
         pttLastSamples = (uint32_t)pttSamples;
         if (pttSamples == MIC_PTT_MAX_SAMPLES) {
           micPttDiscard(pttAudio, pttSamples);
+          pttPsramAfterBytes = ESP.getFreePsram();
           pttSamples = 0;
           pttPhase = MicPttPhase::TIMEOUT;
           pttArmed = false;
@@ -207,6 +243,16 @@ static void micLevelTask(void *) {
     sample.pttPhase = pttPhase;
     sample.pttDurationMs = pttDurationMs;
     sample.pttSamples = pttLastSamples;
+    sample.pttRms = micMetricsRms(pttMetrics);
+    sample.pttPeak = pttMetrics.peak;
+    sample.pttClipPct = micMetricsClippedPercent(pttMetrics);
+    sample.pttRateHz = micMetricsThroughput(pttLastSamples, pttDurationMs);
+    sample.pttCoveragePct = micMetricsCoverage(
+        pttLastSamples, pttDurationMs, MIC_SAMPLE_RATE);
+    sample.pttMemoryValid = pttMemoryValid;
+    sample.pttPsramBeforeKB = pttPsramBeforeBytes / 1024;
+    sample.pttPsramMinKB = pttPsramMinBytes / 1024;
+    sample.pttPsramAfterKB = pttPsramAfterBytes / 1024;
     micLevelPublish(sample);
     // No PCM from the current window remains in this stack buffer.
     memset(pcm, 0, sizeof(pcm));
