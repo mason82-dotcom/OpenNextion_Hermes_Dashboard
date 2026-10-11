@@ -16,6 +16,7 @@
 #define LV_CONF_SKIP
 #include <lvgl.h>
 #include "BoardConfig.h"
+#include "LandscapeTouch.h"
 
 #if __has_include("Config.h")
 #include "Config.h"
@@ -201,10 +202,10 @@ static void touchRead(lv_indev_drv_t *, lv_indev_data_t *data) {
     CST_TS_Point point = touch.getPoint();
     // CST826 reports native portrait axes, independent of LCD rotation.
     // gfx->setRotation(1) rotates the image clockwise. Match the touch axes.
-    const int16_t rx = (int16_t)LCD_V_RES - 1 - (int16_t)point.y;
-    const int16_t ry = (int16_t)point.x;
-    x = constrain(rx, 0, (int16_t)gfx->width() - 1);
-    y = constrain(ry, 0, (int16_t)gfx->height() - 1);
+    const LandscapeTouchPoint rotated = mapNativeTouchToLandscape(
+        point.x, point.y, LCD_H_RES, LCD_V_RES);
+    x = constrain(rotated.x, 0, (int16_t)gfx->width() - 1);
+    y = constrain(rotated.y, 0, (int16_t)gfx->height() - 1);
     data->state = LV_INDEV_STATE_PR;
   } else {
     data->state = LV_INDEV_STATE_REL;
