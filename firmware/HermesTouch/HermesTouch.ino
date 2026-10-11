@@ -375,11 +375,11 @@ static void buildChatPage(lv_obj_t *p) {
   lv_obj_set_style_border_width(chatHistory, 0, 0);
   lv_obj_set_style_pad_all(chatHistory, 0, 0);
   lv_obj_set_scroll_dir(chatHistory, LV_DIR_VER);
-  label(chatHistory, "NOCH KEIN CHATVERLAUF", 13, 15, 270, FG);
-  label(chatHistory, "Nachrichten erscheinen hier erst", 13, 49, 270, MUTED);
-  label(chatHistory, "nach separater Freigabe.", 13, 72, 270, MUTED);
-  label(chatHistory, "Keine Agent-Befehle oder", 13, 102, 270, GREEN);
-  label(chatHistory, "Schreibzugriffe aktiviert.", 13, 125, 270, GREEN);
+  // All four text lines fit inside this compact 125px transcript preview.
+  label(chatHistory, "NOCH KEIN CHATVERLAUF", 13, 10, 270, FG);
+  label(chatHistory, "Nachrichten nur nach Freigabe", 13, 40, 270, MUTED);
+  label(chatHistory, "Keine Agent-Befehle oder", 13, 71, 270, GREEN);
+  label(chatHistory, "Schreibzugriffe aktiviert.", 13, 95, 270, GREEN);
 
   // Local-only PTT. LVGL sets an atomic pressed flag, never handles audio.
   // Neither the button nor the disabled chat composer can send messages.
