@@ -12,6 +12,7 @@ import json
 import os
 import socket
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -134,6 +135,9 @@ def api_health_probe():
 
 
 # Hermes dashboard status may take seconds; never block ESP32 HTTP requests.
+# A complete probe cycle normally finishes every 15s. Fail closed if the
+# background worker stops updating the cache for longer than three intervals.
+PROBE_MAX_AGE_SECONDS = 45.0
 _probe_lock = threading.Lock()
 _probe_data = {
     "dashboard_reachable": False,
@@ -145,17 +149,55 @@ _probe_data = {
     "api_reachable": False,
     "api_healthy": False,
 }
+_last_probe_monotonic = None
+_last_probe_success = None  # UTC Unix seconds of last COMPLETED cycle, not healthy state.
 
 
-def health_snapshot():
+def health_snapshot(*, now_monotonic=None):
+    """Return cached health, never reporting expired results as healthy.
+
+    Pi metrics remain independently live in status_payload(). An HTTPS 200
+    indicates that the bridge responded, not necessarily that Hermes is alive.
+    """
     with _probe_lock:
-        return dict(_probe_data)
+        data = dict(_probe_data)
+        last_mono = _last_probe_monotonic
+        last_epoch = _last_probe_success
+
+    current = time.monotonic() if now_monotonic is None else now_monotonic
+    age = None if last_mono is None else current - last_mono
+    fresh = age is not None and 0.0 <= age <= PROBE_MAX_AGE_SECONDS
+    data.update({
+        "probe_fresh": fresh,
+        "probe_age_s": round(age, 1) if age is not None and age >= 0 else None,
+        "last_probe_success": last_epoch,
+    })
+    if not fresh:
+        # False -> definitely not confirmed healthy. Unknown gateway -> "--"
+        # on the ESP32; never carry forward a previous ON state.
+        data.update({
+            "dashboard_reachable": False,
+            "dashboard_status_available": False,
+            "dashboard_reason": "pending" if last_mono is None else "stale_cache",
+            "dashboard_http_status": None,
+            "gateway_running": None,
+            "version": None,
+            "api_reachable": False,
+            "api_healthy": False,
+        })
+    return data
 
 
 def probe_cycle():
+    """Publish a full coherent probe result only if both functions returned."""
     data = {**dashboard_probe(), **api_health_probe()}
+    completed_mono = time.monotonic()
+    completed_epoch = int(time.time())
+    global _last_probe_monotonic, _last_probe_success
     with _probe_lock:
         _probe_data.update(data)
+        _last_probe_monotonic = completed_mono
+        _last_probe_success = completed_epoch
 
 
 def probe_worker(stop_event):
