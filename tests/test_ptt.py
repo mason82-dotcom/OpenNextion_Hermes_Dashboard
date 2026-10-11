@@ -12,27 +12,30 @@ FIRMWARE = (ROOT / "firmware/HermesTouch/HermesTouch.ino").read_text(encoding="u
 MIC = (ROOT / "firmware/HermesTouch/MicLevelWorker.h").read_text(encoding="utf-8")
 WORKER = (ROOT / "firmware/HermesTouch/TelemetryWorker.h").read_text(encoding="utf-8")
 CHAT = FIRMWARE.split("static void buildChatPage(lv_obj_t *p) {", 1)[1].split(
-    "\nstatic void updateMicUi()", 1,
+    "\nstatic void buildVoicePage(", 1,
+)[0]
+VOICE = FIRMWARE.split("static void buildVoicePage(lv_obj_t *p) {", 1)[1].split(
+    "\n// Read aggregate audio level only;", 1,
 )[0]
 
 
 class TestLocalOnlyPushToTalk(unittest.TestCase):
     def test_version_and_default_mic_off(self):
-        self.assertIn('label(screen, "v0.8.3 | ONX3248G035"', FIRMWARE)
+        self.assertIn('label(screen, "v0.8.4 | 480x320"', FIRMWARE)
         self.assertIn("#ifndef HT_MIC_TEST_ENABLED\n#define HT_MIC_TEST_ENABLED 0", FIRMWARE)
         self.assertIn('#if HT_MIC_TEST_ENABLED\n#include "MicLevelWorker.h"', FIRMWARE)
 
     def test_ptt_control_requires_explicit_microphone_opt_in(self):
-        self.assertIn("chatPttButton = lv_btn_create(p)", CHAT)
+        self.assertIn("chatPttButton = lv_btn_create(p)", VOICE)
         for event in ("LV_EVENT_PRESSED", "LV_EVENT_RELEASED", "LV_EVENT_PRESS_LOST"):
-            self.assertIn("lv_obj_add_event_cb(chatPttButton, onPttTouch, " + event, CHAT)
-        self.assertNotIn("lv_obj_add_event_cb(chatPttButton, onPttTouch, LV_EVENT_ALL", CHAT)
-        self.assertIn("lv_obj_add_state(chatPttButton, LV_STATE_DISABLED)", CHAT)
-        self.assertIn('"HALTEN: TEST"', CHAT)
-        self.assertIn('"PTT: AUS"', CHAT)
+            self.assertIn("lv_obj_add_event_cb(chatPttButton, onPttTouch, " + event, VOICE)
+        self.assertNotIn("lv_obj_add_event_cb(chatPttButton, onPttTouch, LV_EVENT_ALL", VOICE)
+        self.assertIn("lv_obj_add_state(chatPttButton, LV_STATE_DISABLED)", VOICE)
+        self.assertIn('"HALTEN: TEST"', VOICE)
+        self.assertIn('"PTT: AUS"', VOICE)
         # Parse the actual preprocessor branches rather than assuming
         # there are no comments between #if and the event registration.
-        button_section = CHAT.split("chatPttButton = lv_btn_create(p)", 1)[1].split(
+        button_section = VOICE.split("chatPttButton = lv_btn_create(p)", 1)[1].split(
             "lv_obj_t *pttText =", 1,
         )[0]
         enabled_block = button_section.split("#if HT_MIC_TEST_ENABLED", 1)[1].split(
@@ -49,13 +52,13 @@ class TestLocalOnlyPushToTalk(unittest.TestCase):
 
     def test_press_release_and_press_lost_are_handled(self):
         self.assertIn("static void onPttTouch(lv_event_t *event)", FIRMWARE)
-        self.assertIn("code == LV_EVENT_PRESSED && activePage == 3", FIRMWARE)
+        self.assertIn("code == LV_EVENT_PRESSED && activePage == VOICE_PAGE", FIRMWARE)
         self.assertIn("code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST", FIRMWARE)
         self.assertIn("micPttSetHeld(true)", FIRMWARE)
         self.assertIn("micPttSetHeld(false)", FIRMWARE)
 
     def test_navigation_aborts_capture(self):
-        self.assertIn("if (page != 3) micPttSetHeld(false)", FIRMWARE)
+        self.assertIn("if (page != VOICE_PAGE) micPttSetHeld(false)", FIRMWARE)
         self.assertIn("static void showPage(int page)", FIRMWARE)
         self.assertIn("showPage(i)", FIRMWARE)
 
@@ -130,16 +133,21 @@ class TestLocalOnlyPushToTalk(unittest.TestCase):
         self.assertIn('urlBase + "/v1/status"', WORKER)
         self.assertIn("http.GET()", WORKER)
 
-    def test_layout_preserves_composer_and_navigation(self):
+    def test_layout_preserves_separate_voice_and_disabled_chat(self):
         for fragment in (
-            "lv_obj_set_pos(chatPttButton, 10, 194)",
-            "lv_obj_set_size(chatPttButton, 145, 39)",
-            "lv_obj_t *micCard = card(p, 10, 236, 300, 32)",
-            "lv_obj_set_pos(chatInput, 10, 273)",
-            "lv_obj_set_pos(chatSend, 233, 273)",
-            'label(p, "NUR VORSCHAU / KEIN VERSAND", 13, 328',
+            "lv_obj_set_pos(chatPttButton, 10, 49)",
+            "lv_obj_set_size(chatPttButton, 190, 39)",
+            "lv_obj_t *micCard = card(p, 10, 94, 460, 32)",
+            "lv_obj_set_scroll_dir(chatHistory, LV_DIR_VER)",
+            'label(p, "NUR VORSCHAU / KEIN VERSAND", 13, 215',
         ):
-            self.assertIn(fragment, CHAT)
+            target = VOICE if "chatPttButton" in fragment or "micCard" in fragment else CHAT
+            self.assertIn(fragment, target)
+        self.assertIn("lv_obj_set_pos(chatInput, 10, 157)", CHAT)
+        self.assertIn("lv_obj_set_pos(chatSend, 368, 157)", CHAT)
+        self.assertNotIn("chatPttButton", CHAT)
+        self.assertNotIn("chatSpeakerButton", CHAT)
+        self.assertNotIn("lv_textarea_create", VOICE)
 
 
 if __name__ == "__main__":
