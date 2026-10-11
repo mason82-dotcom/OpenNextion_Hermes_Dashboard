@@ -1,8 +1,8 @@
 #pragma once
-// Candidate touch transforms for 480x320 LCD / CST826.
-// Do not infer the sensor's raw orientation from LCD rotation alone.
-// Profile selection is available ONLY through local USB diagnostic opt-in.
-// Pure math, host-testable: no Arduino, LVGL, network or filesystem.
+// OpenNextion ONX3248G035 / CST826 touch mapping for 480x320 Landscape.
+// T1 is the user-selected hardware profile from USB raw-coordinate testing.
+// T0 remains available only in the opt-in, local USB diagnostic selector.
+// Pure math: no Arduino, LVGL, network or filesystem.
 #include <cstdint>
 
 struct LandscapeTouchPoint {
@@ -20,16 +20,17 @@ static inline LandscapeTouchPoint mapNativeTouchToLandscape(
     int rawX, int rawY, int nativeWidth = 320, int nativeHeight = 480) {
   const int px = landscapeClamp(rawX, nativeWidth);
   const int py = landscapeClamp(rawY, nativeHeight);
+  // Confirmed T1: portrait CST826 (x,y) -> landscape (y, width-1-x).
   return {
-      static_cast<int16_t>(nativeHeight - 1 - py),
-      static_cast<int16_t>(px)};
+      static_cast<int16_t>(py),
+      static_cast<int16_t>(nativeWidth - 1 - px)};
 }
 
 // The CST826 may expose native portrait coordinates OR pre-rotated values.
 // These eight profiles cover both coordinate-axis orders and both polarities.
-// 0 is the initial v0.8.4 assumption. Never silently auto-save a profile.
-//   0 native portrait: (479-y, x)   [initial clockwise assumption]
-//   1 native portrait: (y, 319-x)   [reverse rotation]
+// T1 is the permanent production mapping. Diagnostic profiles are volatile.
+//   0 native portrait: (479-y, x)   [previous incorrect production mapping]
+//   1 native portrait: (y, 319-x)   [selected production mapping]
 //   2 landscape raw:  (x, y)       [already corrected by controller]
 //   3 landscape raw:  (479-x, y)
 //   4 landscape raw:  (x, 319-y)
@@ -41,15 +42,15 @@ static inline LandscapeTouchPoint mapTouchWithProfile(
     int nativeWidth = 320, int nativeHeight = 480) {
   const int outWidth = nativeHeight;
   const int outHeight = nativeWidth;
-  if (profile == 0) {
+  if (profile == 1) {
     return mapNativeTouchToLandscape(rawX, rawY, nativeWidth, nativeHeight);
   }
-  if (profile == 1 || profile == 6 || profile == 7) {
+  if (profile == 0 || profile == 6 || profile == 7) {
     const int x = landscapeClamp(rawX, nativeWidth);
     const int y = landscapeClamp(rawY, nativeHeight);
-    if (profile == 1) return {
-        static_cast<int16_t>(y),
-        static_cast<int16_t>(outHeight - 1 - x)};
+    if (profile == 0) return {
+        static_cast<int16_t>(outWidth - 1 - y),
+        static_cast<int16_t>(x)};
     if (profile == 6) return {
         static_cast<int16_t>(y), static_cast<int16_t>(x)};
     return {
