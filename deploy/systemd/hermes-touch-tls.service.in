@@ -1,0 +1,26 @@
+# Template rendered by scripts/pi/install-autostart.sh (@ROOT@ = repository).
+# GET-only HTTPS facade on the configured private LAN IP (port 8766).
+[Unit]
+Description=Hermes Touch TLS status service (LAN, GET only)
+Wants=hermes-touch-bridge.service
+After=hermes-touch-bridge.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=@ROOT@
+# run-tls.sh refuses a non-loopback bridge and a missing device token.
+ExecStart=/usr/bin/bash "@ROOT@/scripts/pi/run-tls.sh"
+Environment=PYTHONUNBUFFERED=1
+# At boot the LAN address may not be assigned yet: bind fails, retry.
+Restart=always
+RestartSec=10
+# Exit 2/3 = missing or refused configuration: do not loop, fix it first.
+RestartPreventExitStatus=2 3
+UMask=0077
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

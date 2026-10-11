@@ -206,6 +206,17 @@ bash scripts/pi/stability-monitor.sh --minutes 30 --interval 5
 
 **Keine Änderung an Firmware, Zertifikaten oder Hermes erforderlich.** Der Monitor sendet nur zertifikatsgeprüfte HTTPS-GET-Anfragen, ohne Proxy/Redirects.
 
+## Autostart (systemd)
+
+Bridge und TLS-Dienst laufen dauerhaft als systemd-User-Units mit automatischem Neustart – ohne `sudo`, ohne Tokens in den Unit-Dateien und ohne Änderung an den Hermes-Diensten:
+
+```bash
+bash scripts/pi/install-autostart.sh --now   # manuelle run-local.sh vorher beenden
+bash scripts/pi/tls-smoke.sh
+```
+
+[**Autostart: Installation, Betrieb, Logs**](docs/AUTOSTART.md)
+
 ## Entwicklung auf dem Pi
 
 Siehe [docs/PI-SETUP.md](docs/PI-SETUP.md). Die Dateien können auf dem Pi per `git pull --ff-only` synchronisiert werden; installierte Agent-Dateien unter `~/.hermes` werden dabei nicht angerührt.
