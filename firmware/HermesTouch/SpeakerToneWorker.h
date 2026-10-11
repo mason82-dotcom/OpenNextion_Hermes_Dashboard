@@ -17,7 +17,7 @@ static constexpr uint32_t SPK_AMP_WAIT_MS = 250;
 static constexpr uint32_t SPK_PLAY_DEADLINE_MS = 700;
 
 enum class SpeakerTonePhase : uint8_t {
-  STARTING, READY, WAIT_AMP, PLAYING, WAIT_MUTE, DONE, ERROR
+  STARTING, READY, QUEUED, WAIT_AMP, PLAYING, WAIT_MUTE, DONE, ERROR
 };
 
 struct SpeakerToneSnapshot {
@@ -35,11 +35,16 @@ static bool speakerToneRequest() {
   if (speakerToneMutex == nullptr) return false;
   if (xSemaphoreTake(speakerToneMutex, 0) != pdTRUE) return false;
   const SpeakerTonePhase phase = speakerToneShared.phase;
-  xSemaphoreGive(speakerToneMutex);
-  if (phase != SpeakerTonePhase::READY && phase != SpeakerTonePhase::DONE)
+  if (phase != SpeakerTonePhase::READY && phase != SpeakerTonePhase::DONE) {
+    xSemaphoreGive(speakerToneMutex);
     return false;
-  // No queued tones: one click -> one quiet 250ms tone.
-  return !speakerTonePending.exchange(true, std::memory_order_acq_rel);
+  }
+  // Reserve the state under the same mutex before signalling the worker,
+  // so rapid double taps cannot queue a second tone while the first plays.
+  speakerToneShared.phase = SpeakerTonePhase::QUEUED;
+  speakerTonePending.store(true, std::memory_order_release);
+  xSemaphoreGive(speakerToneMutex);
+  return true;
 }
 
 static void speakerToneAmpAcknowledged(bool enabled) {
