@@ -326,15 +326,48 @@ static void buildSystemPage(lv_obj_t *p) {
   systemTouches = label(mem, "Touch-Aktionen: --", 11, 121, 278, MUTED);
 }
 
+// Chat UI shell only. There is intentionally NO input callback, message
+// buffer, chat transport, keyboard, Hermes API token or write endpoint here.
 static void buildChatPage(lv_obj_t *p) {
-  label(p, "HERMES CHAT", 13, 13, 290, CYAN);
-  lv_obj_t *cardChat = card(p, 10, 61, 300, 216);
-  label(cardChat, "CHAT IST DEAKTIVIERT", 12, 23, 276, FG);
-  label(cardChat, "Diese Ansicht ist nur ein Platzhalter.", 12, 62, 274, MUTED);
-  label(cardChat, "Es werden keine Nachrichten", 12, 99, 274, MUTED);
-  label(cardChat, "oder Befehle an Hermes gesendet.", 12, 121, 274, MUTED);
-  label(cardChat, "Freigabe erst nach sicherem Transport", 12, 168, 274, GREEN);
-  label(p, "Keine Schreibzugriffe auf den Pi", 13, 301, 290, MUTED);
+  label(p, "HERMES CHAT", 13, 12, 290, CYAN);
+  label(p, "CHAT IST DEAKTIVIERT", 13, 36, 290, GREEN);
+
+  // Reserve a scrollable transcript surface for a future, separately
+  // authorized implementation. Never display fabricated messages.
+  lv_obj_t *chatHistory = lv_obj_create(p);
+  lv_obj_set_pos(chatHistory, 10, 64);
+  lv_obj_set_size(chatHistory, 300, 195);
+  lv_obj_set_style_radius(chatHistory, 12, 0);
+  lv_obj_set_style_bg_color(chatHistory, lv_color_hex(CARD), 0);
+  lv_obj_set_style_bg_opa(chatHistory, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(chatHistory, 0, 0);
+  lv_obj_set_style_pad_all(chatHistory, 0, 0);
+  lv_obj_set_scroll_dir(chatHistory, LV_DIR_VER);
+
+  label(chatHistory, "NOCH KEIN CHATVERLAUF", 13, 17, 270, FG);
+  label(chatHistory, "Nachrichten erscheinen hier erst", 13, 52, 270, MUTED);
+  label(chatHistory, "nach separater Freigabe.", 13, 76, 270, MUTED);
+  label(chatHistory, "Keine Agent-Befehle oder", 13, 123, 270, GREEN);
+  label(chatHistory, "Schreibzugriffe aktiviert.", 13, 146, 270, GREEN);
+
+  // Pure visual scaffold. The disabled text area cannot launch the LVGL
+  // on-screen keyboard and the send button has no click event handler.
+  lv_obj_t *chatInput = lv_textarea_create(p);
+  lv_obj_set_pos(chatInput, 10, 273);
+  lv_obj_set_size(chatInput, 215, 48);
+  lv_textarea_set_one_line(chatInput, true);
+  lv_textarea_set_placeholder_text(chatInput, "Nachricht (gesperrt)");
+  lv_obj_add_state(chatInput, LV_STATE_DISABLED);
+
+  lv_obj_t *chatSend = lv_btn_create(p);
+  lv_obj_set_pos(chatSend, 233, 273);
+  lv_obj_set_size(chatSend, 77, 48);
+  styleButton(chatSend, 0x254A6D);
+  lv_obj_add_state(chatSend, LV_STATE_DISABLED);
+  lv_obj_t *sendText = label(chatSend, "SENDEN", 0, 0, 68, FG);
+  lv_obj_center(sendText);
+
+  label(p, "NUR VORSCHAU / KEIN VERSAND", 13, 328, 290, MUTED);
 }
 
 static void buildUi() {
