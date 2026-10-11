@@ -211,17 +211,17 @@ static void flush(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *p) {
 static void touchRead(lv_indev_drv_t *, lv_indev_data_t *data) {
   static int16_t x = 0;
   static int16_t y = 0;
+#if HT_TOUCH_CALIBRATION_ENABLED
+  static bool wasTouching = false;
+  static uint32_t lastLogMs = 0;
+#endif
   if (touch.touched()) {
     CST_TS_Point point = touch.getPoint();
-    // CST826 reports native portrait axes, independent of LCD rotation.
-    // gfx->setRotation(1) rotates the image clockwise. Match the touch axes.
-    // Diagnostic mode supports runtime profiles, because CST826's actual
-    // raw axis order on this board has not been established empirically.
+    // gfx->setRotation(1) is landscape. The controller's raw axis direction
+    // on this individual board is NOT yet proven; sample before calibrating.
 #if HT_TOUCH_CALIBRATION_ENABLED
     const LandscapeTouchPoint rotated = mapTouchWithProfile(
         point.x, point.y, touchCalibProfile, LCD_H_RES, LCD_V_RES);
-    static uint32_t lastLogMs = 0;
-    static bool wasTouching = false;
     const uint32_t nowMs = millis();
     if (!wasTouching || (uint32_t)(nowMs - lastLogMs) >= 300) {
       Serial.printf("TOUCH_RAW x=%d y=%d -> LVGL x=%d y=%d profile=%u\\r\\n",
@@ -240,14 +240,8 @@ static void touchRead(lv_indev_drv_t *, lv_indev_data_t *data) {
     data->state = LV_INDEV_STATE_PR;
   } else {
 #if HT_TOUCH_CALIBRATION_ENABLED
-    // Per-contact logs are the only touched data exposed on USB Serial;
-    // never exported through telemetry, filesystem, network or MQTT.
-    // Track release separately from mode changes.
-    static uint32_t lastReleaseLogMs = 0;
-    const uint32_t nowMs = millis();
-    if ((uint32_t)(nowMs - lastReleaseLogMs) >= 1000) {
-      lastReleaseLogMs = nowMs;
-    }
+    // Re-arm first-press logging for the next independent touch.
+    wasTouching = false;
 #endif
     data->state = LV_INDEV_STATE_REL;
   }
