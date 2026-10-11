@@ -22,3 +22,9 @@
 // Generates only a fixed 250ms quiet tone via I2S1; no mic playback,
 // no Hermes text-to-speech, no audio upload/download, no agent write.
 #define HT_SPEAKER_TEST_ENABLED 0
+
+
+// USB-local CST826 raw touch coordinate calibration, default OFF.
+// Enable only temporarily in private Config.h; allows volatile T0..T7
+// profile selection over 115200 baud USB serial. No saved config or telemetry.
+#define HT_TOUCH_CALIBRATION_ENABLED 0
