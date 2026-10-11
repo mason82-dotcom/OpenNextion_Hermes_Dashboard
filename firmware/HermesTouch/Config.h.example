@@ -15,3 +15,10 @@
 // Private Config.h opt-in: up to 4s raw PCM TEMPORARILY in PSRAM,
 // explicitly overwritten and freed after PTT. No persistence or sending.
 #define HT_MIC_TEST_ENABLED 0
+
+
+// Optional, independent LOCAL ONLY NS4168 output test.
+// Off unless explicitly enabled in private Config.h.
+// Generates only a fixed 250ms quiet tone via I2S1; no mic playback,
+// no Hermes text-to-speech, no audio upload/download, no agent write.
+#define HT_SPEAKER_TEST_ENABLED 0
