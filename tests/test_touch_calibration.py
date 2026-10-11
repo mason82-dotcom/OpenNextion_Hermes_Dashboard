@@ -24,6 +24,10 @@ class TouchCalibrationTests(unittest.TestCase):
         self.assertIn('#error "HT_TOUCH_CALIBRATION_ENABLED must be 0 or 1"', FIRMWARE)
         self.assertIn("static uint8_t touchCalibProfile = 1", FIRMWARE)
         self.assertIn("#if HT_TOUCH_CALIBRATION_ENABLED", FIRMWARE)
+        # Private Config.h must be read BEFORE the fallback 0; otherwise
+        # Arduino builds may get a macro redefinition warning.
+        self.assertLess(FIRMWARE.index('#include "Config.h"'),
+                        FIRMWARE.index("#ifndef HT_TOUCH_CALIBRATION_ENABLED"))
 
     def test_diagnostic_reports_raw_and_mapped_coordinates_only_on_usb(self):
         self.assertIn('"TOUCH_RAW x=%d y=%d -> LVGL x=%d y=%d profile=%u', FIRMWARE)
@@ -54,6 +58,13 @@ class TouchCalibrationTests(unittest.TestCase):
         self.assertIn("nativeWidth - 1 - px", TOUCH)
         self.assertIn("SCREEN_W = LCD_V_RES", FIRMWARE)
         self.assertIn("gfx->setRotation(1)", FIRMWARE)
+        self.assertIn("static uint8_t touchCalibProfile = 1", FIRMWARE)
+        # Production touch callback always invokes the T1 mapping when
+        # USB-only calibration is not compiled in.
+        self.assertIn(
+            "const LandscapeTouchPoint rotated = mapNativeTouchToLandscape(",
+            FIRMWARE,
+        )
 
     @unittest.skipUnless(shutil.which("g++"), "host g++ not installed")
     def test_actual_cpp_eight_profiles_boundaries_and_clamping(self):
