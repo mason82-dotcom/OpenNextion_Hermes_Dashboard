@@ -1,7 +1,7 @@
 #pragma once
 // Pure, host-testable diagnostic math for a single LOCAL push-to-talk trial.
 // No PCM is retained: only energy, peak, clipping count, and sample count.
-// No ESP, WiFi, LVGL, Hermes, filesystem, or transport dependency.
+// No ESP, network, LVGL, Hermes, filesystem, or transport dependency.
 #include <cstddef>
 #include <cstdint>
 #include <cmath>
