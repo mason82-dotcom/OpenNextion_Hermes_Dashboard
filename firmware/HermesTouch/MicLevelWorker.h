@@ -208,7 +208,9 @@ static void micLevelTask(void *) {
     micLevelPublish(sample);
     // No PCM from the current window remains in this stack buffer.
     memset(pcm, 0, sizeof(pcm));
-    vTaskDelay(pdMS_TO_TICKS(40));
+    // During a hold, keep draining DMA nearly continuously; the old 40ms
+    // VU idle delay would otherwise skip most of a voice test.
+    vTaskDelay(pdMS_TO_TICKS(pttAudio != nullptr ? 1 : 40));
   }
 }
 
