@@ -124,9 +124,9 @@ Die Pi-Bridge markiert gecachte Hermes-Healthchecks nach **45 Sekunden ohne voll
 
 [**Korrekturen, Tests und sichere Aktivierung auf dem Pi**](docs/V0.7.1-FIXES.md)
 
-## In Entwicklung: Hermes Touch v0.8 – ESP32-Diagnose
+## Historie: Hermes Touch v0.8 – ESP32-Diagnose
 
-Die **v0.8-Diagnose-Firmware wurde mit 64/64 Tests und erfolgreichem Connected-Build auf dem Pi geprüft und auf dem OpenNextion in Betrieb genommen**. Die anschließend vorbereitete CHAT-Vorschau ist dagegen **neuer Quellcode, noch nicht neu kompiliert oder auf dem Gerät installiert**. Auf der SYSTEM-Seite stehen künftig zusätzlich der kleinste seit Boot beobachtete freie Heap, der größte zusammenhängende interne Heapblock und die im HTTPS-FreeRTOS-Task ermittelte minimale Stackreserve in Bytes. Laufzeit, PSRAM und Touch-Aktionen bleiben sichtbar. Die Status-/Graph-/Chat-Seiten und alle bisherigen read-only TLS-Sicherheitsgrenzen bleiben unverändert.
+Die **v0.8-Diagnose-Firmware wurde mit 64/64 Tests und erfolgreichem Connected-Build auf dem Pi geprüft und auf dem OpenNextion in Betrieb genommen**. Die anschließend entwickelte, zunächst deaktivierte CHAT-Vorschau wurde später mit **83/83 Tests**, erfolgreichem Connected-Build und einem Hardwarefoto bestätigt. Auf der SYSTEM-Seite stehen künftig zusätzlich der kleinste seit Boot beobachtete freie Heap, der größte zusammenhängende interne Heapblock und die im HTTPS-FreeRTOS-Task ermittelte minimale Stackreserve in Bytes. Laufzeit, PSRAM und Touch-Aktionen bleiben sichtbar. Die Status-/Graph-/Chat-Seiten und alle bisherigen read-only TLS-Sicherheitsgrenzen bleiben unverändert.
 
 **Nächster Prüfschritt für den neuen Repo-Stand:** **83 erwartete Tests** (64 bereits erfolgreich, 6 neue CHAT-Sicherheitstests, 13 neue Offline-Stabilitätsauswertungstests) sowie ein **inkrementeller** Connected-Build. Kein Update auf dem Gerät ohne separate manuelle Flash-Bestätigung.
 
@@ -140,9 +140,9 @@ bash scripts/pi/firmware-build-connected.sh
 # NICHT AUTOMATISCH FLASHEN
 ```
 
-## Nächste v0.8-Erweiterungen: CHAT-Vorschau und offline Stabilitätsbericht
+## Historie: v0.8-CHAT-Vorschau und offline Stabilitätsbericht
 
-Der CHAT-Reiter erhält einen scrollbaren **leeren Verlauf**, eine sichtbare, aber deaktivierte Eingabe sowie eine **gesperrte SENDEN-Taste ohne Callback**. Weder Nachrichten noch Befehle gelangen an den Hermes-Agent. **Das neue UI ist noch nicht geflasht.**
+Der CHAT-Reiter erhält einen scrollbaren **leeren Verlauf**, eine sichtbare, aber deaktivierte Eingabe sowie eine **gesperrte SENDEN-Taste ohne Callback**. Weder Nachrichten noch Befehle gelangen an den Hermes-Agent. **Die gesperrte CHAT-Vorschau wurde danach manuell auf Hardware geprüft.**
 
 [**CHAT-Vorschau und notwendige Sicherheitsfreigaben**](docs/V0.8-CHAT-PREVIEW.md)
 
@@ -154,13 +154,13 @@ python3 scripts/pi/stability_report.py --latest
 
 [**Auswertung und Grenzwerte**](docs/V0.7-STABILITY-TEST.md)
 
-## v0.8.1 in Entwicklung: Nextion Dual MIC Board – lokaler Pegeltest
+## v0.8.1 – lokaler Mikrofonpegel auf Hardware bestätigt
 
-Das Nextion Dual MIC Board ist inzwischen physisch am ONX3248G035 angeschlossen. Im **neuen, noch nicht kompilierten und nicht geflashten Quellcode-Kandidaten v0.8.1** ist ein rein lokaler PDM-Pegeltest vorgesehen: **CLK GPIO19**, **DATA GPIO20**, Arduino-ESP32 3.3.2 `ESP_I2S`, eigener FreeRTOS-Task. Im CHAT-Reiter erscheint ein Pegelbalken und die zuvor auffällig helle deaktivierte Eingabe wurde dunkel gestaltet.
+Das Nextion Dual MIC Board ist inzwischen physisch am ONX3248G035 angeschlossen. In der auf dem Board bestätigten Version **v0.8.1** funktioniert ein rein lokaler PDM-Pegeltest: **CLK GPIO19**, **DATA GPIO20**, Arduino-ESP32 3.3.2 `ESP_I2S`, eigener FreeRTOS-Task. Im CHAT-Reiter erscheint ein Pegelbalken und die zuvor auffällig helle deaktivierte Eingabe wurde dunkel gestaltet.
 
 **Die Aufnahme bleibt standardmäßig AUS (`HT_MIC_TEST_ENABLED=0`).** Zum Hardwaretest muss diese Option später ausdrücklich in der privaten `firmware/HermesTouch/Config.h` aktiviert, der Connected-Build erneut erstellt und das Gerät manuell geflasht werden. Audio wird weder gespeichert noch übertragen; nur der relative Pegel wird an die lokale Oberfläche übergeben. Hermes-CHAT bleibt vollständig gesperrt.
 
-**Nächster Prüfschritt:** **94 Python-Tests erwartet** (83 bereits bestätigt, 2 neue UI-Tests, 9 Mikrofon-Tests) und inkrementeller Connected-Build. Keine laufenden Dienste ändern und nicht automatisch flashen.
+**Abnahme:** **94/94 Python-Tests**, Connected-Build, `TLS OK` und auf Sprache reagierende Pegelanzeige bestätigt. v0.8.2-Push-to-Talk ist ein eigener, noch ungetesteter Quellcode-Kandidat.
 
 [**v0.8.1 PDM-Mikrofon: Sicherheit, Aktivierung und Testablauf**](docs/V0.8.1-MIC-VU.md)
 
