@@ -23,7 +23,8 @@
     {
       "id": "witz",
       "label": "WITZ",
-      "prompt": "Erzaehl einen kurzen, harmlosen Witz."
+      "prompt": "Erzaehl einen kurzen, harmlosen Witz.",
+      "vary": true
     }
   ]
 }

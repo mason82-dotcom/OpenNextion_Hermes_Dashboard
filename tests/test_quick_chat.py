@@ -61,6 +61,7 @@ class PromptFileTests(unittest.TestCase):
             {"id": "b", "label": "VIEL ZU LANGES LABEL", "prompt": "x"},
             {"id": "b", "label": "B", "prompt": "   "},
             {"id": "a", "label": "Doppelt", "prompt": "x"},
+            {"id": "b", "label": "B", "prompt": "x", "vary": "ja"},
         ):
             with self.subTest(bad=bad):
                 self.assertEqual(self.load({"prompts": [good, bad]}), ([], "invalid_prompt_file"))
@@ -101,6 +102,26 @@ class QuickChatTests(unittest.TestCase):
         self.assertEqual((state["state"], state["answer"], state["prompt_id"]),
                          ("done", "Alles gut.", "pi_status"))
         self.assertEqual(chat.ask("rm -rf /")[0], 404)
+
+    def test_vary_prompts_avoid_repeating_recent_answers(self):
+        prompts = [{"id": "witz", "label": "WITZ", "prompt": "Ein Witz.", "vary": True},
+                   {"id": "pi_status", "label": "PI", "prompt": "Status?", "vary": False}]
+        seen, answers = [], iter(f"Witz {n}" for n in range(1, 20))
+        chat = self.make(lambda prompt, key: seen.append(prompt) or next(answers), prompts=prompts)
+        for _ in range(7):
+            chat.ask("witz")
+            wait_state(chat)
+            self.clock.now += bridge.CHAT_MIN_INTERVAL_S
+        self.assertTrue(seen[0].startswith("Ein Witz.\n\n(Variante "))
+        self.assertNotIn("bereits gegeben", seen[0])
+        self.assertIn("- Witz 1", seen[1])
+        # Only the last CHAT_VARY_MEMORY answers are kept and sent back.
+        self.assertNotIn("- Witz 1\n", seen[6] + "\n")
+        self.assertIn("- Witz 2", seen[6])
+        self.assertIn("- Witz 6", seen[6])
+        chat.ask("pi_status")
+        wait_state(chat)
+        self.assertEqual(seen[-1], "Status?")  # non-vary prompts stay identical
 
     def test_busy_and_rate_limits(self):
         gate = threading.Event()

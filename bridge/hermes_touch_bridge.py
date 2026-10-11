@@ -11,6 +11,7 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import random
 import re
 import socket
 import threading
@@ -236,6 +237,10 @@ CHAT_MIN_INTERVAL_S = 15.0
 CHAT_MAX_PER_HOUR = 20
 CHAT_UPSTREAM_TIMEOUT_S = 180.0
 CHAT_BODY_MAX = 256
+# Prompts marked "vary": true remember their last answers (RAM only) and ask
+# Hermes not to repeat them; identical stateless prompts otherwise tend to
+# produce the identical "most likely" answer every time.
+CHAT_VARY_MEMORY = 5
 CHAT_STYLE_SUFFIX = (
     "\n\nAntworte auf Deutsch, kurz (hoechstens 5 Saetze), als reiner Text "
     "ohne Markdown, Tabellen oder Emojis. Die Antwort erscheint auf einem "
@@ -269,10 +274,12 @@ def load_chat_prompts(path: Path):
                 or not 1 <= len(label) <= CHAT_LABEL_MAX
                 or not all(32 <= ord(ch) < 127 for ch in label)
                 or not isinstance(prompt, str)
-                or not 1 <= len(prompt.strip()) <= CHAT_PROMPT_MAX):
+                or not 1 <= len(prompt.strip()) <= CHAT_PROMPT_MAX
+                or not isinstance(item.get("vary", False), bool)):
             return [], "invalid_prompt_file"
         seen.add(pid)
-        prompts.append({"id": pid, "label": label, "prompt": prompt.strip()})
+        prompts.append({"id": pid, "label": label, "prompt": prompt.strip(),
+                        "vary": item.get("vary", False)})
     return prompts, "ok"
 
 
@@ -349,6 +356,7 @@ class QuickChat:
         self._started = None
         self._finished = None
         self._history = []  # monotonic start times within the last hour
+        self._recent = {}  # prompt id -> last answers, only for "vary" prompts
 
     def prompt_list(self):
         return [{"id": pid, "label": self.prompts[pid]["label"]} for pid in self.order]
@@ -373,9 +381,22 @@ class QuickChat:
             self._state, self._prompt_id = "running", prompt_id
             self._answer, self._error = "", None
             self._started, self._finished = now, None
-        prompt = self.prompts[prompt_id]["prompt"]
+            prompt = self._prompt_text(prompt_id)
         threading.Thread(target=self._run, args=(job, prompt_id, prompt), daemon=True).start()
         return 202, {"ok": True, "job": job}
+
+    def _prompt_text(self, prompt_id):
+        """Whitelisted prompt, plus for "vary" prompts the answers to avoid."""
+        entry = self.prompts[prompt_id]
+        if not entry.get("vary"):
+            return entry["prompt"]
+        text = entry["prompt"] + f"\n\n(Variante {random.randint(1000, 9999)})"
+        recent = self._recent.get(prompt_id, [])
+        if recent:
+            text += ("\nDiese Antworten hast du bereits gegeben. Waehle etwas "
+                     "deutlich anderes und wiederhole keine davon:\n"
+                     + "\n".join("- " + answer.replace("\n", " ") for answer in recent))
+        return text
 
     def _run(self, job, prompt_id, prompt):
         answer, error = "", None
@@ -397,6 +418,10 @@ class QuickChat:
                 return
             self._state = "error" if error else "done"
             self._answer, self._error = ("", error) if error else (answer, None)
+            if not error and self.prompts[prompt_id].get("vary"):
+                recent = self._recent.setdefault(prompt_id, [])
+                recent.append(answer)
+                del recent[:-CHAT_VARY_MEMORY]
             self._finished = self._clock()
         print(f"chat job={job} prompt={prompt_id} result={error or 'ok'}", flush=True)
 

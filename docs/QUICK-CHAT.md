@@ -45,6 +45,13 @@ journalctl --user -u hermes-touch-bridge -n 5   # "Quick chat: ENABLED (ok, 5 pr
 
 Format: 1–6 Einträge mit `id` (`a-z0-9_`, max. 16), `label` (ASCII, max. 14
 Zeichen, wird auf dem Knopf angezeigt) und `prompt` (max. 2000 Zeichen).
+Optional `"vary": true`: Für Befehle wie WITZ, bei denen jede Antwort
+anders sein soll. Ohne diese Option schickt die Bridge jedes Mal denselben
+Prompt in eine neue Hermes-Sitzung, und das Modell wählt meist dieselbe
+„wahrscheinlichste“ Antwort. Mit `vary` merkt sich die Bridge die letzten 5
+Antworten dieses Befehls (nur im RAM, weg nach Neustart der Bridge), hängt sie
+mit der Bitte „nicht wiederholen“ an den Prompt und ergänzt eine zufällige
+Variantennummer. Für Statusabfragen nicht verwenden.
 **Ist ein einziger Eintrag ungültig, bleibt der Chat vollständig aus.**
 Änderungen werden nach einem Neustart der Bridge wirksam; das Display lädt die
 Liste innerhalb von 30 s neu, wenn es den Chat vorher als „AUS“ gesehen hat,
