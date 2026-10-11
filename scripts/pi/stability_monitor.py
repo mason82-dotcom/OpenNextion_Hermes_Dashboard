@@ -145,7 +145,10 @@ def probe(opener, url: str, token: str, timeout: float) -> dict:
         row["http_code"] = error.code
     except ssl.SSLError:
         row["result"] = "tls_error"
-    except (URLError, TimeoutError, OSError):
+    except URLError as error:
+        # urllib wraps certificate/handshake failures in URLError(reason=SSLError).
+        row["result"] = "tls_error" if isinstance(error.reason, ssl.SSLError) else "transport_error"
+    except (TimeoutError, OSError):
         row["result"] = "transport_error"
     except (ValueError, UnicodeDecodeError, TypeError):
         row["result"] = "invalid_json"
@@ -215,7 +218,9 @@ def run():
                     print(f"Sample {count}: {row['result']}, HTTP {row['http_code'] or '-'}")
                 elif count == 1 or count % max(1, math.ceil(60 / args.interval)) == 0:
                     print(f"Sample {count}: OK, {row['latency_ms']:.0f} ms")
-                next_tick += args.interval
+                # After a slow probe, resume the cadence instead of firing a
+                # burst of back-to-back catch-up requests.
+                next_tick = max(next_tick + args.interval, time.monotonic())
                 until = next_tick - time.monotonic()
                 if until > 0 and (args.samples is None or count < args.samples):
                     time.sleep(until)

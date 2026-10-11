@@ -28,9 +28,11 @@ jobs:
 
       - name: Install firmware libraries
         run: |
-          arduino-cli lib install "GFX Library for Arduino"
-          arduino-cli lib install "Adafruit CST8XX Library"
-          arduino-cli lib install "Adafruit PCF8574"
+          # Same versions as scripts/pi/setup-arduino-toolchain.sh.
+          arduino-cli lib install "GFX Library for Arduino@1.6.9"
+          arduino-cli lib install "Adafruit BusIO@1.17.4"
+          arduino-cli lib install "Adafruit CST8XX Library@1.1.1"
+          arduino-cli lib install "Adafruit PCF8574@1.1.2"
           arduino-cli lib install "ArduinoJson@7.4.2"
           arduino-cli lib install "lvgl@8.3.11"
 
@@ -56,4 +58,21 @@ jobs:
             --clean \
             --fqbn 'esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB' \
             --build-path "${{ runner.temp }}/hermes-connected-build" \
+            firmware/HermesTouch
+
+      # The opt-in local audio and touch-calibration paths are otherwise never
+      # compiled in CI. Placeholder values only; nothing is uploaded.
+      - name: Compile connected branch with all local diagnostics enabled
+        run: |
+          sed -e 's/HT_MIC_TEST_ENABLED 0/HT_MIC_TEST_ENABLED 1/' \
+              -e 's/HT_SPEAKER_TEST_ENABLED 0/HT_SPEAKER_TEST_ENABLED 1/' \
+              -e 's/HT_TOUCH_CALIBRATION_ENABLED 0/HT_TOUCH_CALIBRATION_ENABLED 1/' \
+              firmware/HermesTouch/Config.h.example > firmware/HermesTouch/Config.h
+          cp firmware/HermesTouch/LocalCa.h.example firmware/HermesTouch/LocalCa.h
+          trap 'rm -f firmware/HermesTouch/Config.h firmware/HermesTouch/LocalCa.h' EXIT
+          test "$(grep -c 'ENABLED 1' firmware/HermesTouch/Config.h)" -eq 3
+          arduino-cli compile \
+            --clean \
+            --fqbn 'esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB' \
+            --build-path "${{ runner.temp }}/hermes-all-diagnostics-build" \
             firmware/HermesTouch

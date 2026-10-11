@@ -130,7 +130,10 @@ def api_health_probe():
             payload = json.loads(r.read(4096))
             return {"api_reachable": True,
                     "api_healthy": isinstance(payload, dict) and payload.get("status") == "ok"}
-    except (URLError, HTTPError, TimeoutError, OSError, ValueError):
+    except HTTPError:
+        # An HTTP error status proves the API answered, but not that it is healthy.
+        return {"api_reachable": True, "api_healthy": False}
+    except (URLError, TimeoutError, OSError, ValueError):
         return {"api_reachable": False, "api_healthy": False}
 
 

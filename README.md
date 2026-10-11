@@ -219,8 +219,11 @@ Siehe [docs/PI-SETUP.md](docs/PI-SETUP.md). Die Dateien können auf dem Pi per `
 - v0.7: FreeRTOS-Hintergrundtask, Snapshot-Mutex, Anzeigealter, stale-data-Sperre, Temperaturgrafik – **35 Tests, Pi-Build, Livebetrieb, kontrollierter TLS-Ausfall und Wiederherstellung auf ONX3248G035 bestätigt**
 - v0.7.1: SHA-256-Fingerabdruck für Connected-Build/Upload einschließlich `TelemetryWorker.h`, Healthcheck-Cache mit 45-s-Gültigkeitsdauer – **56/56 Tests, Connected-Build und frischer Cache über HTTPS am Pi bestätigt**; kein Flash erforderlich
 - v0.8: SYSTEM-Diagnose (Heap-Minimum, größter Block, HTTPS-Task-Stackreserve) – **64/64 Tests, Connected-Build und erste Hardwaremessungen bestätigt**, Graph mit 24/24 echten Pi-Temperaturwerten
-- Neue Entwicklung: strikt deaktivierte CHAT-Vorschau (Verlauf, Eingabefeld, SENDEN-Sperre) und rein lokale Qualitätsauswertung der Pi-HTTPS-Messreihe; **Tests/Build für diese Erweiterung stehen noch aus**. Chat bleibt gesperrt
-- v0.8.1 (noch ungeprüfter Quellcode-Kandidat): lokaler PDM-Mikrofonpegel, separat aktivierbar und ohne Audio-/Chat-Übertragung; gesperrte CHAT-Eingabe jetzt dunkel formatiert
-- Nächste Etappe: 94 erwartete Tests und inkrementellen v0.8.1-Build auf dem Pi prüfen; erst dann den lokalen Mikrofontest bewusst aktivieren und das Board manuell flashen
+- v0.8-CHAT-Vorschau (gesperrt) und Offline-Stabilitätsbericht – **83/83 Tests, Connected-Build und Hardwarefoto bestätigt**; Chat bleibt gesperrt
+- v0.8.1: lokaler PDM-Mikrofonpegel – **94/94 Tests und Hardware bestätigt**
+- v0.8.2/v0.8.3: lokaler 4-s-PTT-Test, PCM-Diagnose und NS4168-Testton – **130/130 Tests, Connected-Build und Hardware bestätigt**
+- v0.8.4: Landscape 480×320 mit SPRACHE-Tab und festem CST826-T1-Mapping – **Pi-Tests, Connected-Build und Hardwareabnahme des T1-Patches stehen noch aus**
+- Robustheit TLS-Dienst: TLS-Handshake jetzt pro Verbindung im Worker-Thread mit 10-s-Timeout. Vorher konnte eine einzige hängende TCP-Verbindung (Portscan, ESP32 verliert WLAN mitten im Handshake) den Dienst auf Port 8766 dauerhaft blockieren. Nach `git pull` den TLS-Prozess neu starten; Firmware unverändert
+- Nächste Etappe: Tests und inkrementellen v0.8.4-Connected-Build auf dem Pi, dann manuelles Flashen und T1-Touch-Abnahme auf der Hardware
 
 Lizenz: noch festzulegen.

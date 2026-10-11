@@ -106,6 +106,17 @@ class TestStabilityMonitor(unittest.TestCase):
         self.assertTrue(request.full_url.endswith("/v1/status"))
         self.assertIn(token, request.headers.values())
 
+    def test_certificate_failure_is_classified_as_tls_error(self):
+        import ssl
+        from urllib.error import URLError
+        fake = Mock()
+        fake.open.side_effect = URLError(ssl.SSLCertVerificationError("bad cert"))
+        row = monitor.probe(fake, "https://192.168.178.63:8766/v1/status", "x" * 30, 4.5)
+        self.assertEqual(row["result"], "tls_error")
+        fake.open.side_effect = URLError(ConnectionRefusedError())
+        row = monitor.probe(fake, "https://192.168.178.63:8766/v1/status", "x" * 30, 4.5)
+        self.assertEqual(row["result"], "transport_error")
+
     def test_no_redirect_follows_token(self):
         self.assertIsNone(monitor.NoRedirect().redirect_request(
             None, None, 302, "moved", {}, "https://elsewhere.example/v1/status"))

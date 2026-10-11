@@ -26,9 +26,11 @@ ESP32_URL='https://espressif.github.io/arduino-esp32/package_esp32_index.json'
 arduino-cli core update-index --additional-urls "$ESP32_URL"
 arduino-cli core install 'esp32:esp32@3.3.2' --additional-urls "$ESP32_URL"
 
-arduino-cli lib install 'GFX Library for Arduino'
-arduino-cli lib install 'Adafruit CST8XX Library'
-arduino-cli lib install 'Adafruit PCF8574'
+# Versions verified on the ONX3248G035; unpinned installs may change the API.
+arduino-cli lib install 'GFX Library for Arduino@1.6.9'
+arduino-cli lib install 'Adafruit BusIO@1.17.4'
+arduino-cli lib install 'Adafruit CST8XX Library@1.1.1'
+arduino-cli lib install 'Adafruit PCF8574@1.1.2'
 arduino-cli lib install 'ArduinoJson@7.4.2'
 arduino-cli lib install 'lvgl@8.3.11'
 

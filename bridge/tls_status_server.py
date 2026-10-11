@@ -24,6 +24,9 @@ TLS_BIND = os.environ.get("HERMES_TOUCH_TLS_BIND", "")
 TLS_PORT = int(os.environ.get("HERMES_TOUCH_TLS_PORT", "8766"))
 TLS_CERT = os.environ.get("HERMES_TOUCH_TLS_CERT", "")
 TLS_KEY = os.environ.get("HERMES_TOUCH_TLS_KEY", "")
+# A client that connects but never completes TLS or its request (port scan,
+# ESP32 losing WiFi mid-handshake) must not hold a server thread forever.
+CONNECTION_TIMEOUT_SECONDS = 10.0
 PRIVATE_V4_NETWORKS = tuple(ipaddress.ip_network(prefix) for prefix in (
     "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
 ))
@@ -59,6 +62,7 @@ def fetch_loopback_status() -> bytes:
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "HermesTouchTLS/0.6"
+    timeout = CONNECTION_TIMEOUT_SECONDS
 
     def log_message(self, _fmt, *_args):
         # Never include the request URL or token in logs.
@@ -112,6 +116,40 @@ class Handler(BaseHTTPRequestHandler):
         self.respond(405, {"error": "read_only"})
 
 
+class TlsHTTPServer(ThreadingHTTPServer):
+    """Performs the TLS handshake in the per-connection thread, not in accept().
+
+    Wrapping the listening socket would run every handshake inside the single
+    serve_forever() thread, so one idle TCP client blocks all other devices.
+    """
+    daemon_threads = True
+
+    def __init__(self, address, handler, context: ssl.SSLContext):
+        self.ssl_context = context
+        super().__init__(address, handler)
+
+    def finish_request(self, request, client_address):
+        request.settimeout(CONNECTION_TIMEOUT_SECONDS)
+        try:
+            tls_sock = self.ssl_context.wrap_socket(request, server_side=True)
+        except (ssl.SSLError, OSError):
+            return  # Failed/aborted handshake: drop quietly, keep serving.
+        try:
+            self.RequestHandlerClass(tls_sock, client_address, self)
+        except OSError:
+            pass  # Client vanished or timed out mid-request.
+        finally:
+            tls_sock.close()
+
+
+def make_server_context(certfile: str, keyfile: str) -> ssl.SSLContext:
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    ctx.options |= ssl.OP_NO_COMPRESSION
+    ctx.load_cert_chain(certfile=certfile, keyfile=keyfile)
+    return ctx
+
+
 def main():
     bind = validate_private_bind(TLS_BIND)
     if len(TOKEN) < 24 or len(DEVICE_TOKEN) < 24:
@@ -125,13 +163,8 @@ def main():
     if not 1 <= TLS_PORT <= 65535 or not 1 <= LOCAL_PORT <= 65535:
         raise SystemExit("Invalid port")
 
-    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
-    ctx.options |= ssl.OP_NO_COMPRESSION
-    ctx.load_cert_chain(certfile=TLS_CERT, keyfile=TLS_KEY)
-    server = ThreadingHTTPServer((bind, TLS_PORT), Handler)
-    server.daemon_threads = True
-    server.socket = ctx.wrap_socket(server.socket, server_side=True)
+    server = TlsHTTPServer((bind, TLS_PORT), Handler,
+                           make_server_context(TLS_CERT, TLS_KEY))
     print(f"Hermes Touch TLS: https://{bind}:{TLS_PORT}/v1/status (GET ONLY)", flush=True)
     try:
         server.serve_forever(poll_interval=0.3)

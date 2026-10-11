@@ -77,6 +77,13 @@ class TestBridge(unittest.TestCase):
             self.assertEqual(module.api_health_probe(),
                              {"api_reachable": False, "api_healthy": False})
 
+    def test_api_health_http_error_is_reachable_but_unhealthy(self):
+        from urllib.error import HTTPError
+        error = HTTPError("http://127.0.0.1:8642/health", 503, "unavailable", {}, None)
+        with patch.object(module, "urlopen", side_effect=error):
+            self.assertEqual(module.api_health_probe(),
+                             {"api_reachable": True, "api_healthy": False})
+
     def test_dashboard_success(self):
         from unittest.mock import MagicMock
         reply = MagicMock()

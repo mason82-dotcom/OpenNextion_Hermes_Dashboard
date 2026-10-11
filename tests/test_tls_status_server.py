@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import threading
 import unittest
-from http.server import ThreadingHTTPServer
+import socket
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
@@ -69,10 +69,8 @@ class TestTlsStatusHandler(unittest.TestCase):
              "-extfile", str(ext), "-out", str(crt)],
             check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
-        cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), tls.Handler)
-        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        ctx.load_cert_chain(str(crt), str(server_key))
-        cls.httpd.socket = ctx.wrap_socket(cls.httpd.socket, server_side=True)
+        cls.httpd = tls.TlsHTTPServer(("127.0.0.1", 0), tls.Handler,
+                                      tls.make_server_context(str(crt), str(server_key)))
         cls.port = cls.httpd.server_port
         cls.context = ssl.create_default_context(cafile=str(ca_crt))
         cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
@@ -145,6 +143,22 @@ class TestTlsStatusHandler(unittest.TestCase):
             code, doc = self.req(token=tls.DEVICE_TOKEN)
         self.assertEqual(code, 503)
         self.assertEqual(doc["error"], "loopback_bridge_unavailable")
+
+    def test_idle_client_does_not_block_other_devices(self):
+        # Regression: a TCP client that never sends a ClientHello (port scan,
+        # ESP32 dropping WiFi mid-handshake) previously stalled accept() forever.
+        payload_data = b'{"ok":true,"schema_version":1}'
+        with socket.create_connection(("127.0.0.1", self.port)) as idle:
+            with patch.object(tls, "fetch_loopback_status", return_value=payload_data):
+                code, payload = self.req(token=tls.DEVICE_TOKEN)
+            self.assertEqual(code, 200)
+            self.assertIs(payload["ok"], True)
+            self.assertIsNotNone(idle)
+
+    def test_connections_have_bounded_timeouts(self):
+        self.assertGreater(tls.CONNECTION_TIMEOUT_SECONDS, 0)
+        self.assertLessEqual(tls.CONNECTION_TIMEOUT_SECONDS, 30)
+        self.assertEqual(tls.Handler.timeout, tls.CONNECTION_TIMEOUT_SECONDS)
 
 
 if __name__ == "__main__":
