@@ -134,11 +134,13 @@ static void micLevelTask(void *) {
       }
     }
     // ESP_I2S readBytes() runs ONLY inside this separate FreeRTOS task.
-    // PCM exists solely in this stack buffer and is discarded every cycle.
+    // A small scratch PCM buffer is erased every cycle; when the local PTT
+    // button is held, at most four seconds are temporarily copied to PSRAM.
     const size_t got = micLevelI2S.readBytes(
         reinterpret_cast<char *>(pcm), sizeof(pcm));
     if (got < sizeof(int16_t) * 32 || (got % sizeof(int16_t)) != 0) {
-      if (++failedReads >= 3) {
+      if (failedReads < 3) ++failedReads;
+      if (failedReads >= 3) {
         // Read failure must discard previously buffered audio too.
         micPttDiscard(pttAudio, pttSamples);
         pttSamples = 0;
