@@ -17,6 +17,14 @@
 #include <lvgl.h>
 #include "BoardConfig.h"
 #include "LandscapeTouch.h"
+#if __has_include("Config.h")
+#include "Config.h"
+#else
+#define HT_DEMO_MODE 1
+#endif
+#ifndef HT_DEMO_MODE
+#define HT_DEMO_MODE 0
+#endif
 // Opt-in USB-only touch calibration. Never compiled into normal firmware
 // unless enabled in the locally private Config.h for a diagnostic build.
 #ifndef HT_TOUCH_CALIBRATION_ENABLED
@@ -26,14 +34,6 @@
 #error "HT_TOUCH_CALIBRATION_ENABLED must be 0 or 1"
 #endif
 
-#if __has_include("Config.h")
-#include "Config.h"
-#else
-#define HT_DEMO_MODE 1
-#endif
-#ifndef HT_DEMO_MODE
-#define HT_DEMO_MODE 0
-#endif
 // Microphone capture is a separate, explicitly opt-in LOCAL test.
 // Without an explicit private Config.h switch, no mic driver is initialized.
 #ifndef HT_MIC_TEST_ENABLED
@@ -150,7 +150,7 @@ static uint32_t lastSampleMs = 0;
 static bool requestSample = false;
 static int activePage = 0;
 #if HT_TOUCH_CALIBRATION_ENABLED
-static uint8_t touchCalibProfile = 0; // original v0.8.4 mapping
+static uint8_t touchCalibProfile = 1; // production T1: mapped even on restart
 static lv_obj_t *touchCalibLabel = nullptr;
 static bool touchCalibCommandOpen = false;
 #endif
@@ -217,8 +217,8 @@ static void touchRead(lv_indev_drv_t *, lv_indev_data_t *data) {
 #endif
   if (touch.touched()) {
     CST_TS_Point point = touch.getPoint();
-    // gfx->setRotation(1) is landscape. The controller's raw axis direction
-    // on this individual board is NOT yet proven; sample before calibrating.
+    // Fixed, board-verified T1 orientation for gfx->setRotation(1).
+    // Diagnostic USB mode can temporarily override it for troubleshooting.
 #if HT_TOUCH_CALIBRATION_ENABLED
     const LandscapeTouchPoint rotated = mapTouchWithProfile(
         point.x, point.y, touchCalibProfile, LCD_H_RES, LCD_V_RES);
@@ -811,7 +811,7 @@ static void buildUi() {
   label(screen, "HERMES TOUCH", 10, 3, 195, CYAN);
   label(screen, "v0.8.4 | 480x320", 210, 7, 155, MUTED);
 #if HT_TOUCH_CALIBRATION_ENABLED
-  touchCalibLabel = label(screen, "TOUCH: PROFIL 0", 250, 23, 215, CYAN);
+  touchCalibLabel = label(screen, "TOUCH: PROFIL 1", 250, 23, 215, CYAN);
 #endif
 #if !HT_DEMO_MODE
   connectionLabel = label(screen, "WLAN --", 376, 7, 98, MUTED);
@@ -1010,8 +1010,7 @@ void setup() {
   Wire.begin(NEXTION_IIC_SDA_PIN, NEXTION_IIC_SCL_PIN, 400000);
   panelReset();
   gfx->begin(LCD_SPI_FREQ);
-  // 90-degree clockwise landscape; native board glass is 320x480.
-  // Unverified on the physical touch controller until deliberate manual flash.
+  // 480x320 landscape on native 320x480 glass; CST826 uses fixed T1 map.
   gfx->setRotation(1);
   gfx->fillScreen(RGB565_BLACK);
   pinMode(LCD_BL_PIN, OUTPUT);
