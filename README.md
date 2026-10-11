@@ -2,7 +2,7 @@
 
 **Hermes Touch** – ESP32-S3 Touchscreen für den vorhandenen Hermes-Agent auf dem Raspberry Pi 5.
 
-**Aktueller Projektstand (11.10.2026):** **Hermes Touch v0.8.1 läuft auf dem OpenNextion ONX3248G035.** Auf dem Raspberry Pi wurden **94/94 Python-Tests** und ein erfolgreicher **Connected-Build** bestätigt; der PDM-Pegel des angeschlossenen Nextion Dual MIC Boards wurde am echten Display bei Sprache geprüft, **TLS OK** ist sichtbar. Der v0.8-Pi-HTTPS-Test lieferte **360/360 erfolgreiche Requests** und **WARN** wegen p95 = **358,7 ms** (Zielwert 250 ms); es gab keine Hermes-/Gateway-Ausfälle. **Neuer, noch ungeprüfter Quellcode-Kandidat: v0.8.2** mit lokalem Push-to-Talk-Test (maximal 4 Sekunden PCM im PSRAM, danach verworfen). Die vorhandene v0.8.1-Firmware wurde dadurch **nicht** verändert. **Erwartet: 106 Python-Tests und inkrementeller Connected-Build auf dem Pi, kein automatischer Flash.** Die CHAT-Eingabe, SENDEN und Hermes-Schreibzugriffe bleiben deaktiviert.
+**Aktueller Projektstand (11.10.2026):** **Hermes Touch v0.8.2 läuft erfolgreich auf dem OpenNextion ONX3248G035.** Der Anwender bestätigte **106/106 Pi-Tests**, den Connected-Build und den manuellen Hardwaretest des Dual-MIC-Boards: PTT-Druck/Loslassen, `PTT: VERWORFEN`, den automatischen **4-Sekunden-Abbruch** und `TLS OK`. Zwei SYSTEM-Fotos nach fünf und sechs Minuten zeigten stabil **163 KB Heap, 118 KB Heap-Minimum, 119 KB größten freien Block, 8.175/8.192 KB PSRAM frei und 9.356 B TLS-Stackreserve**. **Neu im GitHub-Quellcode: v0.8.3-Kandidat** mit lokaler PCM-/PSRAM-Diagnose, RMS, Peak, Clip-Anteil und beobachtetem PCM-Durchsatz samt Fortschrittsbalken. **Dieser neue Stand wurde noch nicht auf dem Pi getestet, kompiliert oder geflasht; 118 Tests werden erwartet.** V0.8.2 bleibt auf dem Display. Das TLS-/Bridge-API ist weiter ausschließlich lesend und Chat/SENDEN bleiben deaktiviert.
 
 ## Architektur
 
@@ -171,6 +171,14 @@ Die nächste Version greift die Hersteller-Interaktion aus **[OpenNextion `07_mi
 **v0.8.2 wurde noch nicht auf dem Pi kompiliert oder auf Hardware getestet.** Die bestehende v0.8.1 läuft weiter. **106 Python-Tests erwartet** (94 bestätigte + 12 neue PTT-Tests) und Connected-Build; kein automatischer Flash.
 
 [**PTT-Konzept, Hardwareprüfung und Sicherheitsgrenzen**](docs/V0.8.2-LOCAL-PTT.md)
+
+## v0.8.3 in Entwicklung – PCM-/PSRAM-Diagnose (nur lokal)
+
+Auf Basis der auf Hardware bestätigten v0.8.2 ergänzt v0.8.3 **nur eine lokale, aggregierte PTT-Diagnose**: Anzahl tatsächlich gepufferter PCM-Samples, verstrichene Aufnahmezeit, grob beobachteter Sample-Durchsatz, Verhältnis zum 16-kHz-Soll, RMS, Peak und Anteil nahezu voll ausgesteuerter Samples sowie PSRAM frei **vor/minimal während/nach** dem Test. Im PTT-Taster erscheint ein 4-Sekunden-Fortschrittsbalken. Die deaktivierte Chat-Oberfläche, HTTPS-CA, die Vier-Sekunden-/128-KB-Grenze und das automatische Verwerfen der temporären PCM-Daten bleiben erhalten. Ein host-kompilierter C++-Mathematiktest prüft die echte Berechnung in `MicAudioMetrics.h`. Die Daten belegen **keine lückenlose Aufnahmequalität**.
+
+**Noch kein Pi-Test oder Firmware-Build für v0.8.3 bestätigt.** Erwartet: **118 Python-Tests** (106 bestätigt + 12 neu). **Nicht automatisch flashen.**
+
+[**v0.8.3 Testablauf, Grenzen und Erläuterung der Messwerte**](docs/V0.8.3-AUDIO-DIAGNOSTICS.md)
 
 ## 30-Minuten-Stabilitätstest für v0.8 (kein Flashen)
 
