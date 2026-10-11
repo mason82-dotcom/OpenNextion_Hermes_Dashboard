@@ -197,6 +197,22 @@ class TestBridge(unittest.TestCase):
             self.assertIsNone(snapshot["gateway_running"])
             self.assertEqual(snapshot["probe_age_s"], 46.0)
 
+    def test_http_status_route_marks_expired_cache_unhealthy(self):
+        cached = {
+            **module._probe_data, "api_healthy": True,
+            "dashboard_status_available": True, "gateway_running": True,
+        }
+        with patch.object(module, "_probe_data", cached), \
+             patch.object(module, "_last_probe_monotonic", -100000.0), \
+             patch.object(module, "_last_probe_success", 1234567890):
+            code, payload = self.req(token=module.TOKEN)
+        self.assertEqual(code, 200)
+        self.assertFalse(payload["hermes"]["probe_fresh"])
+        self.assertFalse(payload["hermes"]["api_healthy"])
+        self.assertFalse(payload["hermes"]["dashboard_status_available"])
+        self.assertIsNone(payload["hermes"]["gateway_running"])
+        self.assertEqual(payload["hermes"]["dashboard_reason"], "stale_cache")
+
     def test_requests_never_call_upstream(self):
         with patch.object(module, "dashboard_probe",
                           side_effect=AssertionError("blocking upstream")), \
