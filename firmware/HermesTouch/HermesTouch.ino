@@ -1,4 +1,4 @@
-/* Hermes Touch v0.8.3 (candidate) - LOCAL-ONLY PTT PCM diagnostics.
+/* Hermes Touch v0.8.4 (candidate) - 480x320 landscape, separate voice tab.
  * Hardware: OpenNextion ONX3248G035 / ESP32-S3.
  * Default build has no Config.h -> NO WIFI, NO DEVICE TOKEN, NO API ACCESS.
  * Status and history explicitly distinguish local ESP32 demo values from Pi data.
@@ -69,7 +69,12 @@ static constexpr uint32_t SAMPLE_MS = 5000;
 static constexpr uint32_t LCD_SPI_FREQ = 80000000;
 static constexpr uint16_t BUF_LINES = 40;
 static constexpr uint8_t GRAPH_SAMPLES = 24;
-static constexpr int PAGE_COUNT = 4;
+static constexpr int PAGE_COUNT = 5;
+static constexpr int VOICE_PAGE = 4;
+static constexpr int SCREEN_W = LCD_V_RES;
+static constexpr int SCREEN_H = LCD_H_RES;
+static constexpr int PAGE_TOP = 80;
+static constexpr int PAGE_HEIGHT = SCREEN_H - PAGE_TOP;
 static constexpr uint32_t BG = 0x101827;
 static constexpr uint32_t CARD = 0x1D2C41;
 static constexpr uint32_t FG = 0xE9F5FF;
@@ -94,7 +99,7 @@ static bool speakerToneStartFailed = false;
 #endif
 static lv_disp_draw_buf_t drawBuf;
 static lv_disp_drv_t dispDrv;
-static lv_color_t dispBuf[LCD_H_RES * BUF_LINES];
+static lv_color_t dispBuf[SCREEN_W * BUF_LINES];
 
 static lv_obj_t *pages[PAGE_COUNT] = {nullptr};
 static lv_obj_t *navBtns[PAGE_COUNT] = {nullptr};
@@ -117,6 +122,10 @@ static lv_obj_t *chatDiagRms = nullptr;
 static lv_obj_t *chatDiagPsram = nullptr;
 static lv_obj_t *chatSpeakerButton = nullptr;
 static lv_obj_t *chatSpeakerStatus = nullptr;
+static lv_obj_t *chatSpeakerStop = nullptr;
+static lv_obj_t *chatSpeakerVolume = nullptr;
+static lv_obj_t *chatSpeakerVolumeLabel = nullptr;
+static int speakerVolumePct = 50;
 static lv_obj_t *historyChart = nullptr;
 static lv_chart_series_t *historySeries = nullptr;
 static lv_obj_t *historyValue = nullptr;
@@ -190,8 +199,12 @@ static void touchRead(lv_indev_drv_t *, lv_indev_data_t *data) {
   static int16_t y = 0;
   if (touch.touched()) {
     CST_TS_Point point = touch.getPoint();
-    x = constrain(point.x, 0, (int16_t)gfx->width() - 1);
-    y = constrain(point.y, 0, (int16_t)gfx->height() - 1);
+    // CST826 reports native portrait axes, independent of LCD rotation.
+    // gfx->setRotation(1) rotates the image clockwise. Match the touch axes.
+    const int16_t rx = (int16_t)LCD_V_RES - 1 - (int16_t)point.y;
+    const int16_t ry = (int16_t)point.x;
+    x = constrain(rx, 0, (int16_t)gfx->width() - 1);
+    y = constrain(ry, 0, (int16_t)gfx->height() - 1);
     data->state = LV_INDEV_STATE_PR;
   } else {
     data->state = LV_INDEV_STATE_REL;
@@ -235,8 +248,8 @@ static void styleButton(lv_obj_t *btn, uint32_t bg) {
 static void showPage(int page) {
   if (page < 0 || page >= PAGE_COUNT) return;
 #if HT_MIC_TEST_ENABLED
-  // Leaving CHAT is another independent stop trigger for raw PTT capture.
-  if (page != 3) micPttSetHeld(false);
+  // Leaving SPRACHE independently cancels local PTT capture.
+  if (page != VOICE_PAGE) micPttSetHeld(false);
 #endif
   activePage = page;
   for (int i = 0; i < PAGE_COUNT; ++i) {
@@ -264,7 +277,7 @@ static void onPttTouch(lv_event_t *event) {
   const lv_event_code_t code = lv_event_get_code(event);
   // Mirror the official ONX3248G035 07_microphone_test touch lifecycle:
   // PRESSED -> start, LONG_PRESSED -> continue, RELEASED/PRESS_LOST -> stop.
-  if (code == LV_EVENT_PRESSED && activePage == 3) {
+  if (code == LV_EVENT_PRESSED && activePage == VOICE_PAGE) {
     ++touchActions;
     micPttSetHeld(true);
   } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
@@ -279,7 +292,32 @@ static void onSpeakerTest(lv_event_t *event) {
 #if HT_SPEAKER_TEST_ENABLED
   if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
   ++touchActions;
-  (void)speakerToneRequest(); // local, fixed waveform; no network
+  if (activePage == VOICE_PAGE)
+    (void)speakerToneRequest(speakerVolumePct); // fixed local tone, no network
+#else
+  (void)event;
+#endif
+}
+
+static void onSpeakerStop(lv_event_t *event) {
+#if HT_SPEAKER_TEST_ENABLED
+  if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+    ++touchActions;
+    speakerToneRequestStop(); // stops I2S worker; GUI mutes amp
+  }
+#else
+  (void)event;
+#endif
+}
+
+static void onSpeakerVolume(lv_event_t *event) {
+#if HT_SPEAKER_TEST_ENABLED
+  if (lv_event_get_code(event) != LV_EVENT_VALUE_CHANGED) return;
+  const int volume = (int)lv_slider_get_value(lv_event_get_target(event));
+  speakerVolumePct = (int)speakerClampLevel(volume);
+  if (chatSpeakerVolumeLabel != nullptr)
+    lv_label_set_text_fmt(chatSpeakerVolumeLabel, "PEGEL: %u %%",
+                          (unsigned)speakerVolumePct);
 #else
   (void)event;
 #endif
@@ -302,8 +340,8 @@ static void resetHistory(lv_event_t *event) {
 
 static lv_obj_t *makePage(lv_obj_t *screen) {
   lv_obj_t *p = lv_obj_create(screen);
-  lv_obj_set_pos(p, 0, 62);
-  lv_obj_set_size(p, 320, 352);
+  lv_obj_set_pos(p, 0, PAGE_TOP);
+  lv_obj_set_size(p, SCREEN_W, PAGE_HEIGHT);
   lv_obj_set_style_pad_all(p, 0, 0);
   lv_obj_set_style_border_width(p, 0, 0);
   lv_obj_set_style_bg_opa(p, LV_OPA_TRANSP, 0);
@@ -312,62 +350,60 @@ static lv_obj_t *makePage(lv_obj_t *screen) {
 }
 
 static void buildStatusPage(lv_obj_t *p) {
-  lv_obj_t *agent = card(p, 10, 8, 300, 79);
-  label(agent, "HERMES-AGENT", 12, 9, 276, CYAN);
-  statusHeadline = label(agent, "Offline-Test / kein Pi", 12, 31, 276, FG);
-  statusDetail = label(agent, "Keine Hermes-Abfrage aktiv", 12, 55, 276, MUTED);
+  lv_obj_t *agent = card(p, 10, 5, 460, 65);
+  label(agent, "HERMES-AGENT", 11, 5, 435, CYAN);
+  statusHeadline = label(agent, "Offline-Test / kein Pi", 11, 25, 435, FG);
+  statusDetail = label(agent, "Keine Hermes-Abfrage aktiv", 11, 45, 435, MUTED);
 
-  lv_obj_t *a = card(p, 10, 97, 145, 86);
+  const int xs[4] = {10, 127, 244, 361};
+  lv_obj_t *a = card(p, xs[0], 77, 109, 79);
 #if HT_DEMO_MODE
-  label(a, "ESP32 HEAP", 10, 10, 125, MUTED);
+  label(a, "ESP32 HEAP", 8, 8, 96, MUTED);
 #else
-  label(a, "PI CPU-TEMP", 10, 10, 125, MUTED);
+  label(a, "PI CPU-TEMP", 8, 8, 96, MUTED);
 #endif
-  valueA = label(a, "--", 10, 41, 125, FG);
-
-  lv_obj_t *b = card(p, 165, 97, 145, 86);
+  valueA = label(a, "--", 8, 38, 96, FG);
+  lv_obj_t *b = card(p, xs[1], 77, 109, 79);
 #if HT_DEMO_MODE
-  label(b, "ESP32 PSRAM", 10, 10, 125, MUTED);
+  label(b, "ESP32 PSRAM", 8, 8, 96, MUTED);
 #else
-  label(b, "PI RAM", 10, 10, 125, MUTED);
+  label(b, "PI RAM", 8, 8, 96, MUTED);
 #endif
-  valueB = label(b, "--", 10, 41, 125, FG);
-
-  lv_obj_t *c = card(p, 10, 193, 145, 83);
+  valueB = label(b, "--", 8, 38, 96, FG);
+  lv_obj_t *c = card(p, xs[2], 77, 109, 79);
 #if HT_DEMO_MODE
-  label(c, "UPTIME", 10, 9, 125, MUTED);
+  label(c, "UPTIME", 8, 8, 96, MUTED);
 #else
-  label(c, "PI LOAD", 10, 9, 125, MUTED);
+  label(c, "PI LOAD", 8, 8, 96, MUTED);
 #endif
-  valueC = label(c, "--", 10, 39, 125, FG);
-
-  lv_obj_t *d = card(p, 165, 193, 145, 83);
-  label(d, "TOUCH-AKTIONEN", 10, 9, 125, MUTED);
-  valueD = label(d, "0", 10, 39, 125, FG);
+  valueC = label(c, "--", 8, 38, 96, FG);
+  lv_obj_t *d = card(p, xs[3], 77, 109, 79);
+  label(d, "TOUCH", 8, 8, 96, MUTED);
+  valueD = label(d, "0", 8, 38, 96, FG);
 
   lv_obj_t *btn = lv_btn_create(p);
-  lv_obj_set_pos(btn, 10, 284);
-  lv_obj_set_size(btn, 300, 44);
+  lv_obj_set_pos(btn, 10, 165);
+  lv_obj_set_size(btn, 220, 48);
   styleButton(btn, 0x157EAD);
   lv_obj_add_event_cb(btn, onRefresh, LV_EVENT_CLICKED, nullptr);
-  lv_obj_t *txt = label(btn, "JETZT AKTUALISIEREN", 0, 0, 260, FG);
+  lv_obj_t *txt = label(btn, "JETZT AKTUALISIEREN", 0, 0, 205, FG);
   lv_obj_center(txt);
   statusFoot = label(p, "Offline: nur lokale ESP32-Messwerte",
-                     14, 333, 298, MUTED);
+                     246, 182, 221, MUTED);
 }
 
 static void buildHistoryPage(lv_obj_t *p) {
 #if HT_DEMO_MODE
-  label(p, "ESP32 HEAP - VERLAUF", 13, 12, 290, CYAN);
-  label(p, "Echte Messwerte vom ESP32, alle 5 s", 13, 37, 290, MUTED);
+  label(p, "ESP32 HEAP - VERLAUF", 13, 6, 445, CYAN);
+  label(p, "Echte Messwerte vom ESP32, alle 5 s", 13, 27, 445, MUTED);
 #else
-  label(p, "PI CPU-TEMP - VERLAUF", 13, 12, 290, CYAN);
-  label(p, "Echte Werte von der Bridge, alle 5 s", 13, 37, 290, MUTED);
+  label(p, "PI CPU-TEMP - VERLAUF", 13, 6, 445, CYAN);
+  label(p, "Echte Werte von der Bridge, alle 5 s", 13, 27, 445, MUTED);
 #endif
-  lv_obj_t *graphCard = card(p, 10, 65, 300, 194);
+  lv_obj_t *graphCard = card(p, 10, 50, 460, 125);
   historyChart = lv_chart_create(graphCard);
-  lv_obj_set_pos(historyChart, 9, 11);
-  lv_obj_set_size(historyChart, 282, 173);
+  lv_obj_set_pos(historyChart, 10, 8);
+  lv_obj_set_size(historyChart, 440, 110);
   lv_obj_set_style_bg_color(historyChart, lv_color_hex(CARD), 0);
   lv_obj_set_style_border_width(historyChart, 0, 0);
   lv_obj_set_style_line_color(historyChart, lv_color_hex(0x36465D),
@@ -386,132 +422,60 @@ static void buildHistoryPage(lv_obj_t *p) {
       historyChart, lv_color_hex(CYAN), LV_CHART_AXIS_PRIMARY_Y);
   lv_chart_set_all_value(historyChart, historySeries, LV_CHART_POINT_NONE);
 
-  historyValue = label(p, "Warte auf erste Messung ...",
-                       13, 266, 292, FG);
+  historyValue = label(p, "Warte auf erste Messung ...", 13, 184, 260, FG);
   lv_obj_t *reset = lv_btn_create(p);
-  lv_obj_set_pos(reset, 10, 293);
-  lv_obj_set_size(reset, 300, 45);
+  lv_obj_set_pos(reset, 285, 180);
+  lv_obj_set_size(reset, 185, 43);
   styleButton(reset, 0x254A6D);
   lv_obj_add_event_cb(reset, resetHistory, LV_EVENT_CLICKED, nullptr);
-  lv_obj_t *txt = label(reset, "VERLAUF ZURUECKSETZEN", 0, 0, 270, FG);
+  lv_obj_t *txt = label(reset, "VERLAUF ZURUECK", 0, 0, 172, FG);
   lv_obj_center(txt);
 }
 
 static void buildSystemPage(lv_obj_t *p) {
-  label(p, "GERAET / HARDWARE", 13, 13, 290, CYAN);
-  lv_obj_t *hw = card(p, 10, 49, 300, 130);
-  label(hw, "OpenNextion ONX3248G035", 11, 12, 278, FG);
-  label(hw, "ESP32-S3  |  ST7796U  |  CST826", 11, 43, 278, MUTED);
-  label(hw, "320 x 480  |  LVGL 8.3", 11, 75, 278, MUTED);
+  label(p, "GERAET / HARDWARE", 13, 5, 460, CYAN);
+  lv_obj_t *hw = card(p, 10, 34, 220, 190);
+  label(hw, "OpenNextion", 10, 8, 200, FG);
+  label(hw, "ONX3248G035", 10, 34, 200, MUTED);
+  label(hw, "ESP32-S3 / ST7796U", 10, 61, 200, MUTED);
+  label(hw, "CST826 / LVGL 8.3", 10, 88, 200, MUTED);
+  label(hw, "480 x 320 LANDSCAPE", 10, 115, 200, GREEN);
 #if HT_DEMO_MODE
-  label(hw, "Modus: OFFLINE (kein WLAN)", 11, 101, 278, GREEN);
+  label(hw, "Modus: OFFLINE", 10, 149, 200, GREEN);
 #else
-  label(hw, "Modus: VERBUNDEN (Test)", 11, 101, 278, GREEN);
+  label(hw, "Modus: VERBUNDEN", 10, 149, 200, GREEN);
 #endif
 
-  // Six diagnostic rows fit without overlapping navigation (page ends at y=352).
-  lv_obj_t *mem = card(p, 10, 186, 300, 156);
-  systemHeap = label(mem, "Heap frei / Minimum: --", 11, 6, 278, FG);
-  systemLargestBlock = label(mem, "Groesster Heap-Block: --", 11, 29, 278, FG);
-  systemPsram = label(mem, "PSRAM: --", 11, 52, 278, FG);
-  systemStack = label(mem, "TLS-Task Stackreserve: --", 11, 75, 278, MUTED);
-  systemUptime = label(mem, "Laufzeit: --", 11, 98, 278, MUTED);
-  systemTouches = label(mem, "Touch-Aktionen: --", 11, 121, 278, MUTED);
+  lv_obj_t *mem = card(p, 240, 34, 230, 190);
+  systemHeap = label(mem, "Heap frei / Minimum: --", 8, 5, 216, FG);
+  systemLargestBlock = label(mem, "Groesster Heap-Block: --", 8, 34, 216, FG);
+  systemPsram = label(mem, "PSRAM: --", 8, 63, 216, FG);
+  systemStack = label(mem, "TLS-Task Stackreserve: --", 8, 92, 216, MUTED);
+  systemUptime = label(mem, "Laufzeit: --", 8, 121, 216, MUTED);
+  systemTouches = label(mem, "Touch-Aktionen: --", 8, 150, 216, MUTED);
 }
 
-// Chat UI shell: no message send callback, transport, keyboard or API key.
+// CHAT is a read-only text-chat shell; intentionally contains NO mic,
+// speaker, PCM, recording or agent send buttons. Text entry is hard disabled.
 static void buildChatPage(lv_obj_t *p) {
-  label(p, "HERMES CHAT", 13, 12, 290, CYAN);
-  label(p, "CHAT IST DEAKTIVIERT", 13, 36, 290, GREEN);
-
+  label(p, "HERMES CHAT", 13, 10, 450, CYAN);
+  label(p, "CHAT IST DEAKTIVIERT", 13, 37, 450, GREEN);
   lv_obj_t *chatHistory = lv_obj_create(p);
-  lv_obj_set_pos(chatHistory, 10, 64);
-  lv_obj_set_size(chatHistory, 300, 125);
-  lv_obj_set_style_radius(chatHistory, 12, 0);
+  lv_obj_set_pos(chatHistory, 10, 67);
+  lv_obj_set_size(chatHistory, 460, 78);
   lv_obj_set_style_bg_color(chatHistory, lv_color_hex(CARD), 0);
   lv_obj_set_style_bg_opa(chatHistory, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(chatHistory, 0, 0);
   lv_obj_set_style_pad_all(chatHistory, 0, 0);
   lv_obj_set_scroll_dir(chatHistory, LV_DIR_VER);
-  // The scrollable (still empty) chat shell also hosts read-only, local
-  // aggregate PCM diagnostics. Scroll down for the unchanged chat notice.
-  label(chatHistory, "LOKALE AUDIO-DIAGNOSE", 13, 5, 270, CYAN);
-#if HT_MIC_TEST_ENABLED
-  chatDiagPcm = label(chatHistory, "PCM: -- | --.-s", 13, 30, 275, MUTED);
-  chatDiagRate = label(chatHistory, "Rate: --/s | Anteil: --%", 13, 52, 275, MUTED);
-  chatDiagRms = label(chatHistory, "RMS: -- Peak: -- Clip: --%", 13, 74, 275, MUTED);
-  chatDiagPsram = label(chatHistory, "PSRAM KB: -- / -- / --", 13, 96, 275, MUTED);
-#else
-  label(chatHistory, "MIC/PTT: AUS (lokal)", 13, 48, 270, MUTED);
-#endif
-  // Scroll down below microphone diagnostics for the independent speaker test.
-  chatSpeakerButton = lv_btn_create(chatHistory);
-  lv_obj_set_pos(chatSpeakerButton, 13, 137);
-  lv_obj_set_size(chatSpeakerButton, 135, 40);
-  styleButton(chatSpeakerButton, 0x176A98);
-#if HT_SPEAKER_TEST_ENABLED
-  if (expanderAvailable)
-    lv_obj_add_event_cb(chatSpeakerButton, onSpeakerTest, LV_EVENT_CLICKED, nullptr);
-  else
-    lv_obj_add_state(chatSpeakerButton, LV_STATE_DISABLED);
-  chatSpeakerStatus = label(chatHistory, "SPK: STARTET", 155, 149, 127, MUTED);
-#else
-  lv_obj_add_state(chatSpeakerButton, LV_STATE_DISABLED);
-  chatSpeakerStatus = label(chatHistory, "SPK: AUS", 155, 149, 127, MUTED);
-#endif
-  lv_obj_t *speakerText = label(chatSpeakerButton, "TESTTON", 0, 0, 114, FG);
-  lv_obj_center(speakerText);
-  label(chatHistory, "NOCH KEIN CHATVERLAUF", 13, 197, 270, FG);
-  label(chatHistory, "Nachrichten nur nach Freigabe", 13, 225, 270, MUTED);
-  label(chatHistory, "Keine Agent-Befehle oder", 13, 250, 270, GREEN);
-  label(chatHistory, "Schreibzugriffe aktiviert.", 13, 273, 270, GREEN);
+  label(chatHistory, "NOCH KEIN CHATVERLAUF", 12, 5, 420, FG);
+  label(chatHistory, "Nachrichten nur nach Freigabe", 12, 29, 420, MUTED);
+  label(chatHistory, "Keine Agent-Befehle oder Schreibzugriffe aktiviert.",
+        12, 52, 430, GREEN);
 
-  // Local-only PTT. LVGL sets an atomic pressed flag, never handles audio.
-  // Neither the button nor the disabled chat composer can send messages.
-  chatPttButton = lv_btn_create(p);
-  lv_obj_set_pos(chatPttButton, 10, 194);
-  lv_obj_set_size(chatPttButton, 145, 39);
-  styleButton(chatPttButton, 0x157EAD);
-#if HT_MIC_TEST_ENABLED
-  // Register exactly the lifecycle events used by OpenNextion's official
-  // 07_microphone_test; do not dispatch unrelated LVGL events to PTT.
-  lv_obj_add_event_cb(chatPttButton, onPttTouch, LV_EVENT_PRESSED, nullptr);
-  lv_obj_add_event_cb(chatPttButton, onPttTouch, LV_EVENT_RELEASED, nullptr);
-  lv_obj_add_event_cb(chatPttButton, onPttTouch, LV_EVENT_PRESS_LOST, nullptr);
-  chatPttStatus = label(p, "PTT: BEREIT", 165, 204, 145, MUTED);
-#else
-  lv_obj_add_state(chatPttButton, LV_STATE_DISABLED);
-  chatPttStatus = label(p, "PTT: AUS", 165, 204, 145, MUTED);
-#endif
-  lv_obj_t *pttText = label(chatPttButton, "HALTEN: TEST", 0, 0, 134, FG);
-  lv_obj_center(pttText);
-  chatPttProgress = lv_bar_create(chatPttButton);
-  lv_obj_set_pos(chatPttProgress, 8, 32);
-  lv_obj_set_size(chatPttProgress, 129, 4);
-  lv_bar_set_range(chatPttProgress, 0, 4000);
-  lv_bar_set_value(chatPttProgress, 0, LV_ANIM_OFF);
-  lv_obj_set_style_bg_color(chatPttProgress, lv_color_hex(0x20334C), LV_PART_MAIN);
-  lv_obj_set_style_bg_color(chatPttProgress, lv_color_hex(GREEN), LV_PART_INDICATOR);
-
-  lv_obj_t *micCard = card(p, 10, 236, 300, 32);
-#if HT_MIC_TEST_ENABLED
-  chatMicLabel = label(micCard, "MIC: STARTET (lokal)", 8, 5, 166, MUTED);
-#else
-  chatMicLabel = label(micCard, "MIC: AUS (nur lokal)", 8, 5, 166, MUTED);
-#endif
-  chatMicBar = lv_bar_create(micCard);
-  lv_obj_set_pos(chatMicBar, 182, 9);
-  lv_obj_set_size(chatMicBar, 106, 14);
-  lv_bar_set_range(chatMicBar, 0, 100);
-  lv_bar_set_value(chatMicBar, 0, LV_ANIM_OFF);
-  lv_obj_set_style_bg_color(chatMicBar, lv_color_hex(0x20334C), LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(chatMicBar, LV_OPA_COVER, LV_PART_MAIN);
-  lv_obj_set_style_bg_color(chatMicBar, lv_color_hex(GREEN), LV_PART_INDICATOR);
-
-  // Disabled controls are deliberately styled to look disabled as well.
   lv_obj_t *chatInput = lv_textarea_create(p);
-  lv_obj_set_pos(chatInput, 10, 273);
-  lv_obj_set_size(chatInput, 215, 48);
+  lv_obj_set_pos(chatInput, 10, 157);
+  lv_obj_set_size(chatInput, 348, 48);
   lv_textarea_set_one_line(chatInput, true);
   lv_textarea_set_placeholder_text(chatInput, "Nachricht (gesperrt)");
   lv_obj_add_state(chatInput, LV_STATE_DISABLED);
@@ -523,18 +487,114 @@ static void buildChatPage(lv_obj_t *p) {
                               LV_PART_MAIN | LV_STATE_DISABLED);
   lv_obj_set_style_border_width(chatInput, 0,
                                 LV_PART_MAIN | LV_STATE_DISABLED);
-
   lv_obj_t *chatSend = lv_btn_create(p);
-  lv_obj_set_pos(chatSend, 233, 273);
-  lv_obj_set_size(chatSend, 77, 48);
+  lv_obj_set_pos(chatSend, 368, 157);
+  lv_obj_set_size(chatSend, 102, 48);
   styleButton(chatSend, 0x254A6D);
   lv_obj_add_state(chatSend, LV_STATE_DISABLED);
   lv_obj_set_style_bg_color(chatSend, lv_color_hex(0x20334C),
                             LV_PART_MAIN | LV_STATE_DISABLED);
-  lv_obj_t *sendText = label(chatSend, "SENDEN", 0, 0, 68, MUTED);
+  lv_obj_t *sendText = label(chatSend, "SENDEN", 0, 0, 90, MUTED);
   lv_obj_center(sendText);
+  label(p, "NUR VORSCHAU / KEIN VERSAND", 13, 215, 450, MUTED);
+}
 
-  label(p, "NUR VORSCHAU / KEIN VERSAND", 13, 328, 290, MUTED);
+// SPRACHE is a separate, LOCAL-only audio hardware test surface.
+// No PTT samples go to the speaker, Hermes agent, TLS bridge or filesystem.
+static void buildVoicePage(lv_obj_t *p) {
+  label(p, "SPRACHE / AUDIO", 13, 4, 430, CYAN);
+  label(p, "Nur lokaler Hardwaretest - keine Agent-Befehle", 13, 27, 445, MUTED);
+  chatPttButton = lv_btn_create(p);
+  lv_obj_set_pos(chatPttButton, 10, 49);
+  lv_obj_set_size(chatPttButton, 190, 39);
+  styleButton(chatPttButton, 0x157EAD);
+#if HT_MIC_TEST_ENABLED
+  lv_obj_add_event_cb(chatPttButton, onPttTouch, LV_EVENT_PRESSED, nullptr);
+  lv_obj_add_event_cb(chatPttButton, onPttTouch, LV_EVENT_RELEASED, nullptr);
+  lv_obj_add_event_cb(chatPttButton, onPttTouch, LV_EVENT_PRESS_LOST, nullptr);
+  chatPttStatus = label(p, "PTT: BEREIT", 214, 58, 245, MUTED);
+#else
+  lv_obj_add_state(chatPttButton, LV_STATE_DISABLED);
+  chatPttStatus = label(p, "PTT: AUS", 214, 58, 245, MUTED);
+#endif
+  lv_obj_t *pttText = label(chatPttButton, "HALTEN: TEST", 0, 0, 176, FG);
+  lv_obj_center(pttText);
+  chatPttProgress = lv_bar_create(chatPttButton);
+  lv_obj_set_pos(chatPttProgress, 8, 32);
+  lv_obj_set_size(chatPttProgress, 174, 4);
+  lv_bar_set_range(chatPttProgress, 0, 4000);
+  lv_bar_set_value(chatPttProgress, 0, LV_ANIM_OFF);
+  lv_obj_set_style_bg_color(chatPttProgress, lv_color_hex(0x20334C), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(chatPttProgress, lv_color_hex(GREEN), LV_PART_INDICATOR);
+
+  lv_obj_t *micCard = card(p, 10, 94, 460, 32);
+#if HT_MIC_TEST_ENABLED
+  chatMicLabel = label(micCard, "MIC: STARTET (lokal)", 8, 5, 190, MUTED);
+#else
+  chatMicLabel = label(micCard, "MIC: AUS (nur lokal)", 8, 5, 190, MUTED);
+#endif
+  chatMicBar = lv_bar_create(micCard);
+  lv_obj_set_pos(chatMicBar, 240, 9);
+  lv_obj_set_size(chatMicBar, 210, 14);
+  lv_bar_set_range(chatMicBar, 0, 100);
+  lv_bar_set_value(chatMicBar, 0, LV_ANIM_OFF);
+  lv_obj_set_style_bg_color(chatMicBar, lv_color_hex(0x20334C), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(chatMicBar, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(chatMicBar, lv_color_hex(GREEN), LV_PART_INDICATOR);
+
+  lv_obj_t *diag = card(p, 10, 134, 282, 101);
+  label(diag, "PCM-DIAGNOSE", 8, 3, 265, CYAN);
+#if HT_MIC_TEST_ENABLED
+  chatDiagPcm = label(diag, "PCM: -- | --.-s", 8, 23, 268, MUTED);
+  chatDiagRate = label(diag, "Rate: --/s | Anteil: --%", 8, 42, 268, MUTED);
+  chatDiagRms = label(diag, "RMS: -- Peak: -- Clip: --%", 8, 61, 268, MUTED);
+  chatDiagPsram = label(diag, "PSRAM KB: -- / -- / --", 8, 80, 268, MUTED);
+#else
+  label(diag, "MIC/PTT: AUS (lokal)", 8, 40, 265, MUTED);
+#endif
+
+  lv_obj_t *spk = card(p, 300, 134, 170, 101);
+  chatSpeakerButton = lv_btn_create(spk);
+  lv_obj_set_pos(chatSpeakerButton, 8, 7);
+  lv_obj_set_size(chatSpeakerButton, 72, 32);
+  styleButton(chatSpeakerButton, 0x176A98);
+  chatSpeakerStop = lv_btn_create(spk);
+  lv_obj_set_pos(chatSpeakerStop, 88, 7);
+  lv_obj_set_size(chatSpeakerStop, 74, 32);
+  styleButton(chatSpeakerStop, 0x254A6D);
+#if HT_SPEAKER_TEST_ENABLED
+  if (expanderAvailable) {
+    lv_obj_add_event_cb(chatSpeakerButton, onSpeakerTest, LV_EVENT_CLICKED, nullptr);
+    lv_obj_add_event_cb(chatSpeakerStop, onSpeakerStop, LV_EVENT_CLICKED, nullptr);
+  } else {
+    lv_obj_add_state(chatSpeakerButton, LV_STATE_DISABLED);
+    lv_obj_add_state(chatSpeakerStop, LV_STATE_DISABLED);
+  }
+  chatSpeakerStatus = label(spk, "SPK: STARTET", 8, 42, 153, MUTED);
+#else
+  lv_obj_add_state(chatSpeakerButton, LV_STATE_DISABLED);
+  lv_obj_add_state(chatSpeakerStop, LV_STATE_DISABLED);
+  chatSpeakerStatus = label(spk, "SPK: AUS", 8, 42, 153, MUTED);
+#endif
+  lv_obj_t *spkText = label(chatSpeakerButton, "TON", 0, 0, 65, FG);
+  lv_obj_center(spkText);
+  lv_obj_t *stopText = label(chatSpeakerStop, "STOP", 0, 0, 65, FG);
+  lv_obj_center(stopText);
+  chatSpeakerVolumeLabel = label(spk, "PEGEL: 50 %", 8, 62, 145, MUTED);
+  chatSpeakerVolume = lv_slider_create(spk);
+  lv_obj_set_pos(chatSpeakerVolume, 8, 86);
+  lv_obj_set_size(chatSpeakerVolume, 154, 8);
+  lv_slider_set_range(chatSpeakerVolume, 0, 100);
+  lv_slider_set_value(chatSpeakerVolume, speakerVolumePct, LV_ANIM_OFF);
+#if HT_SPEAKER_TEST_ENABLED
+  if (expanderAvailable)
+    lv_obj_add_event_cb(chatSpeakerVolume, onSpeakerVolume,
+                        LV_EVENT_VALUE_CHANGED, nullptr);
+  else
+    lv_obj_add_state(chatSpeakerVolume, LV_STATE_DISABLED);
+#else
+  lv_obj_add_state(chatSpeakerVolume, LV_STATE_DISABLED);
+#endif
 }
 
 // Read aggregate audio level only; always from the LVGL/main task.
@@ -670,6 +730,9 @@ static void updateSpeakerUi() {
     case SpeakerTonePhase::WAIT_MUTE:
       lv_label_set_text(chatSpeakerStatus, "SPK: STOPPT");
       break;
+    case SpeakerTonePhase::STOPPED:
+      lv_label_set_text(chatSpeakerStatus, "SPK: GESTOPPT");
+      break;
     case SpeakerTonePhase::DONE:
       lv_label_set_text_fmt(chatSpeakerStatus, "SPK: OK %lu",
           (unsigned long)output.completed);
@@ -689,29 +752,28 @@ static void buildUi() {
   lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_bg_color(screen, lv_color_hex(BG), 0);
   lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
-  label(screen, "HERMES TOUCH", 13, 10, 200, CYAN);
-  label(screen, "v0.8.3 | ONX3248G035", 13, 35, 280, MUTED);
+  label(screen, "HERMES TOUCH", 10, 3, 195, CYAN);
+  label(screen, "v0.8.4 | 480x320", 210, 7, 155, MUTED);
 #if !HT_DEMO_MODE
-  connectionLabel = label(screen, "WLAN --", 219, 12, 97, MUTED);
+  connectionLabel = label(screen, "WLAN --", 376, 7, 98, MUTED);
 #endif
-  pages[0] = makePage(screen);
-  pages[1] = makePage(screen);
-  pages[2] = makePage(screen);
-  pages[3] = makePage(screen);
+  for (int i = 0; i < PAGE_COUNT; ++i)
+    pages[i] = makePage(screen);
   buildStatusPage(pages[0]);
   buildHistoryPage(pages[1]);
   buildSystemPage(pages[2]);
   buildChatPage(pages[3]);
+  buildVoicePage(pages[VOICE_PAGE]);
 
   static const char *const titles[PAGE_COUNT] =
-      {"STATUS", "GRAPH", "SYSTEM", "CHAT"};
+      {"STATUS", "GRAPH", "SYSTEM", "CHAT", "SPRACHE"};
   for (int i = 0; i < PAGE_COUNT; ++i) {
     navBtns[i] = lv_btn_create(screen);
-    lv_obj_set_pos(navBtns[i], 5 + i * 79, 420);
-    lv_obj_set_size(navBtns[i], 74, 51);
+    lv_obj_set_pos(navBtns[i], 5 + i * 95, 39);
+    lv_obj_set_size(navBtns[i], 90, 35);
     styleButton(navBtns[i], 0x20334C);
     lv_obj_add_event_cb(navBtns[i], onNav, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t *txt = label(navBtns[i], titles[i], 0, 0, 68, FG);
+    lv_obj_t *txt = label(navBtns[i], titles[i], 0, 0, 86, FG);
     lv_obj_center(txt);
   }
   showPage(0);
@@ -885,7 +947,9 @@ void setup() {
   Wire.begin(NEXTION_IIC_SDA_PIN, NEXTION_IIC_SCL_PIN, 400000);
   panelReset();
   gfx->begin(LCD_SPI_FREQ);
-  gfx->setRotation(0);  // Verified on user's ONX3248G035
+  // 90-degree clockwise landscape; native board glass is 320x480.
+  // Unverified on the physical touch controller until deliberate manual flash.
+  gfx->setRotation(1);
   gfx->fillScreen(RGB565_BLACK);
   pinMode(LCD_BL_PIN, OUTPUT);
   digitalWrite(LCD_BL_PIN, HIGH);
@@ -893,7 +957,7 @@ void setup() {
     Serial.println("WARN: CST826 not initialized");
 
   lv_init();
-  lv_disp_draw_buf_init(&drawBuf, dispBuf, nullptr, LCD_H_RES * BUF_LINES);
+  lv_disp_draw_buf_init(&drawBuf, dispBuf, nullptr, SCREEN_W * BUF_LINES);
   lv_disp_drv_init(&dispDrv);
   dispDrv.hor_res = gfx->width();
   dispDrv.ver_res = gfx->height();
@@ -908,7 +972,7 @@ void setup() {
   buildUi();
 
 #if HT_DEMO_MODE
-  Serial.println("HERMES TOUCH v0.8.3 OFFLINE: NO WIFI / NO API / READ-ONLY");
+  Serial.println("HERMES TOUCH v0.8.4 OFFLINE: NO WIFI / NO API / READ-ONLY");
 #else
   // Creates a separate FreeRTOS network worker; LVGL never waits for HTTPS.
   telemetryStarted = telemetryStart();
