@@ -2,7 +2,7 @@
 
 **Hermes Touch** – ESP32-S3 Touchscreen für den vorhandenen Hermes-Agent auf dem Raspberry Pi 5.
 
-**Aktueller Projektstand (11.10.2026):** Auf dem OpenNextion ONX3248G035 läuft die **bestätigte v0.8.2** (106/106 Python-Tests, Connected-Build, PDM-Mikrofon, Push-to-Talk, Vier-Sekunden-Abbruch und `TLS OK`). Für die **v0.8.3-PCM-Diagnose** wurden auf dem Pi **118/118 Tests und ein erfolgreicher Connected-Build** nachgewiesen; sie wurde noch nicht auf das Display übertragen. **Zusätzlich ist jetzt ein separat aktivierbarer NS4168-Lautsprecher-Testton** auf Basis des offiziellen OpenNextion Arduino `07_microphone_test` integriert (I²S1 GPIO14/15/16, PCF8574-P0-Verstärker, 250 ms, leise). **Dieser neue Quellstand muss noch auf dem Pi getestet und neu kompiliert werden: 130 Tests erwartet.** Die PTT-Aufnahme wird weiterhin nur temporär im PSRAM gepuffert und vernichtet; kein Mikrofon-Audio geht an den Lautsprecher oder ins Netzwerk. CHAT/SENDEN, Hermes-Schreibzugriffe und TTS bleiben deaktiviert. Der verifizierte v0.8.2-Stand auf dem Display wird nicht automatisch geflasht oder verändert.
+**Aktueller Hardwarestand (11.10.2026):** **v0.8.3 läuft auf dem OpenNextion ONX3248G035**, nach **130/130 Pi-Tests**, erfolgreichem Connected-Build und manuellen Hardwareprüfungen: PDM-Mikrofon, PCM-/PSRAM-Diagnose, PTT-Timeout, **hörbarer NS4168-Testton**, `SPK: OK 1`, weiter reagierender Mikrofonpegel und `TLS OK`. Der Textchat und alle Hermes-Schreibzugriffe sind gesperrt. **Neu im GitHub-Quellcode: v0.8.4-Kandidat**, noch **nicht** auf dem Pi getestet, kompiliert oder geflasht: **Landscape 480x320**, fünf separate Tabs **STATUS / GRAPH / SYSTEM / CHAT / SPRACHE**, eigener SPRACHE-Tab mit PTT, PCM-Diagnose, Lautsprecher-Testton, Lautstärkeregler und STOP-Taste; Chat bleibt ein eigener deaktivierter Text-Tab. Es werden **141 Tests** sowie ein erneuter Connected-Build erwartet. Kein automatischer Flash und weiterhin keine Audioübertragung oder Hermes-TTS.
 
 ## Architektur
 
@@ -187,6 +187,14 @@ Der Hersteller-[Arduino-Mikrofontest für ONX3248G035](https://github.com/OpenNe
 **Neu und noch nicht hardwaregetestet:** Erst nach manueller Aktivierung und einem frischen Connected-Build sowie **130 erwarteten Python-Tests** wäre ein späterer manueller Upload möglich. Es wird keine Hermes-Sprachwiedergabe oder Chat-Freigabe vorgenommen.
 
 [**Setup, Herstellerpins, Mikrofon-Koexistenz und Tests**](docs/V0.8.3-SPEAKER-OUTPUT.md)
+
+## v0.8.4 – Landscape mit eigenem SPRACHE-Tab (Quellcode-Kandidat)
+
+Die mit v0.8.3 hardwarebestätigten PDM-Mikrofon- und NS4168-Lautsprecherwege bleiben erhalten; ihre lokale Bedienung wurde auf die neue fünfte Registerkarte **SPRACHE** verschoben. Der separate **CHAT-Tab** zeigt weiterhin nur einen **gesperrten Textchat**. Neu sind **480x320 Landscape**, eine auf 90° transformierte CST826-Toucheingabe, 0–100% begrenzte **Testton-Pegelwahl** (100% = höchstens die zuvor bereits geprüfte leise Amplitude), **STOP** und der weiterhin zeitlich begrenzte viersekündige PTT-Test. Keine Hermes-Audiofunktion, kein TTS, kein Audio über die Bridge und keine Agent-Befehle.
+
+**v0.8.4 noch nicht auf dem Pi oder Display bestätigt.** Im Repo liegen **11 zusätzliche Tests** (insgesamt **141 erwartet**) einschließlich eines ausführbaren C++-Hosttests für Touch-Ecken und PCM-Aussteuerungsgrenzen. Der bereits erfolgreiche v0.8.3-Build darf nicht als v0.8.4-Build wiederverwendet werden.
+
+[**v0.8.4 Landscape-/Sprach-Tab-Anleitung und Prüfplan**](docs/V0.8.4-LANDSCAPE-VOICE.md)
 
 ## 30-Minuten-Stabilitätstest für v0.8 (kein Flashen)
 
