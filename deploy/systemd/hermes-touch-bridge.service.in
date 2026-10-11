@@ -1,7 +1,8 @@
 # Template rendered by scripts/pi/install-autostart.sh (@ROOT@ = repository).
-# Read-only Hermes Touch bridge on 127.0.0.1:8765. Never modifies Hermes.
+# Hermes Touch bridge on 127.0.0.1:8765: read-only status plus optional
+# whitelisted quick commands. Never modifies Hermes configuration.
 [Unit]
-Description=Hermes Touch read-only status bridge (loopback only)
+Description=Hermes Touch status bridge (loopback only)
 After=hermes-dashboard.service hermes-gateway.service
 StartLimitIntervalSec=0
 

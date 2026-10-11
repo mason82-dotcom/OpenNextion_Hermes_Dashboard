@@ -1,0 +1,29 @@
+{
+  "prompts": [
+    {
+      "id": "pi_status",
+      "label": "PI-STATUS",
+      "prompt": "Fasse kurz den Zustand dieses Raspberry Pi zusammen: CPU-Temperatur, RAM, freier Speicherplatz und auffaellige Dienste. Nur lesen, nichts veraendern."
+    },
+    {
+      "id": "hermes",
+      "label": "HERMES",
+      "prompt": "Wie geht es dem Hermes-Agenten? Gab es in der letzten Stunde Fehler oder Warnungen in seinen Logs? Nur lesen, nichts veraendern."
+    },
+    {
+      "id": "heute",
+      "label": "HEUTE",
+      "prompt": "Was steht heute an? Nenne anstehende Termine, Erinnerungen und geplante Cronjobs, soweit du darauf Zugriff hast. Nichts veraendern."
+    },
+    {
+      "id": "wetter",
+      "label": "WETTER",
+      "prompt": "Wie wird das Wetter heute und morgen an meinem Wohnort? Nur Temperatur, Niederschlag und Wind."
+    },
+    {
+      "id": "witz",
+      "label": "WITZ",
+      "prompt": "Erzaehl einen kurzen, harmlosen Witz."
+    }
+  ]
+}

@@ -58,6 +58,18 @@
 #include "SpeakerToneWorker.h"
 #endif
 
+// Hermes quick commands: the CHAT tab sends only Pi-whitelisted prompt IDs.
+// Without this private Config.h opt-in the tab stays a locked preview.
+#ifndef HT_CHAT_QUICK_ENABLED
+#define HT_CHAT_QUICK_ENABLED 0
+#endif
+#if HT_CHAT_QUICK_ENABLED != 0 && HT_CHAT_QUICK_ENABLED != 1
+#error "HT_CHAT_QUICK_ENABLED must be 0 or 1"
+#endif
+#if HT_CHAT_QUICK_ENABLED && HT_DEMO_MODE
+#error "HT_CHAT_QUICK_ENABLED requires the connected mode (HT_DEMO_MODE 0)"
+#endif
+
 #if !HT_DEMO_MODE
 #include "TelemetryWorker.h"
 #ifndef HT_WIFI_SSID
@@ -79,6 +91,7 @@ static constexpr uint32_t LCD_SPI_FREQ = 80000000;
 static constexpr uint16_t BUF_LINES = 40;
 static constexpr uint8_t GRAPH_SAMPLES = 24;
 static constexpr int PAGE_COUNT = 5;
+static constexpr int CHAT_PAGE = 3;
 static constexpr int VOICE_PAGE = 4;
 static constexpr int SCREEN_W = LCD_V_RES;
 static constexpr int SCREEN_H = LCD_H_RES;
@@ -803,6 +816,149 @@ static void touchCalibHandleUsb() {
 }
 #endif
 
+#if HT_CHAT_QUICK_ENABLED
+// CHAT tab with Pi-whitelisted quick commands. Buttons carry only an index
+// into the list received from the Pi; there is no text input or keyboard.
+// History is a RAM-only text buffer, newest answer first.
+static lv_obj_t *chatQuickStatus = nullptr;
+static lv_obj_t *chatQuickLog = nullptr;
+static lv_obj_t *chatQuickLogBox = nullptr;
+static lv_obj_t *chatQuickButtons[CHAT_MAX_PROMPTS] = {nullptr};
+static lv_obj_t *chatQuickButtonLabels[CHAT_MAX_PROMPTS] = {nullptr};
+static ChatSnapshot chatGui;
+static char chatLog[3072] = "";
+static uint32_t chatShownPromptsVersion = 0;
+static uint32_t chatShownAnswerSequence = 0;
+static uint32_t chatTapMs = 0;
+static uint32_t chatBusySinceMs = 0;
+
+static void chatLogPrepend(const char *label, const char *text) {
+  char entry[CHAT_ANSWER_LEN + 40];
+  snprintf(entry, sizeof(entry), "> %s\n%s\n\n", label, text);
+  size_t added = strlen(entry);
+  if (added >= sizeof(chatLog)) added = sizeof(chatLog) - 1;
+  const size_t old = strlen(chatLog);
+  const size_t keep = min(old, sizeof(chatLog) - 1 - added);
+  memmove(chatLog + added, chatLog, keep); // oldest text drops off the end
+  chatLog[added + keep] = '\0';
+  memcpy(chatLog, entry, added);
+}
+
+static void onChatPrompt(lv_event_t *event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED || activePage != CHAT_PAGE)
+    return;
+  if (chatTapMs != 0 || chatIsBusy(chatGui.phase)) return;
+  ++touchActions;
+  chatTapMs = millis();
+  if (chatTapMs == 0) chatTapMs = 1;
+  chatRequestPrompt((int8_t)(intptr_t)lv_event_get_user_data(event),
+                    telemetryTaskHandle);
+}
+
+static void buildQuickChatPage(lv_obj_t *p) {
+  label(p, "HERMES SCHNELLBEFEHLE", 13, 4, 240, CYAN);
+  chatQuickStatus = label(p, "LADE BEFEHLE ...", 250, 4, 220, MUTED);
+  lv_obj_set_style_text_align(chatQuickStatus, LV_TEXT_ALIGN_RIGHT, 0);
+  for (int i = 0; i < CHAT_MAX_PROMPTS; ++i) {
+    lv_obj_t *btn = lv_btn_create(p);
+    lv_obj_set_pos(btn, 10 + (i % 3) * 155, 26 + (i / 3) * 40);
+    lv_obj_set_size(btn, 148, 34);
+    styleButton(btn, 0x157EAD);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(0x20334C),
+                              LV_PART_MAIN | LV_STATE_DISABLED);
+    lv_obj_add_event_cb(btn, onChatPrompt, LV_EVENT_CLICKED,
+                        (void *)(intptr_t)i);
+    chatQuickButtonLabels[i] = label(btn, "", 0, 0, 136, FG);
+    lv_obj_set_style_text_align(chatQuickButtonLabels[i], LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_center(chatQuickButtonLabels[i]);
+    lv_obj_add_flag(btn, LV_OBJ_FLAG_HIDDEN); // shown once the Pi list arrives
+    chatQuickButtons[i] = btn;
+  }
+  chatQuickLogBox = lv_obj_create(p);
+  lv_obj_set_pos(chatQuickLogBox, 10, 108);
+  lv_obj_set_size(chatQuickLogBox, 460, 128);
+  lv_obj_set_style_bg_color(chatQuickLogBox, lv_color_hex(CARD), 0);
+  lv_obj_set_style_bg_opa(chatQuickLogBox, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(chatQuickLogBox, 0, 0);
+  lv_obj_set_style_radius(chatQuickLogBox, 12, 0);
+  lv_obj_set_style_pad_all(chatQuickLogBox, 8, 0);
+  lv_obj_set_scroll_dir(chatQuickLogBox, LV_DIR_VER);
+  chatQuickLog = label(chatQuickLogBox, "Noch keine Antworten.\n"
+                       "Befehl antippen - Hermes antwortet hier.\n"
+                       "Verlauf nur im RAM, kein Freitext.", 0, 0, 438, MUTED);
+}
+
+static void updateQuickChatUi() {
+  if (chatQuickStatus == nullptr || !chatReadSnapshot(chatGui)) return;
+  const uint32_t now = millis();
+  const bool busy = chatIsBusy(chatGui.phase);
+  if (busy) {
+    if (chatBusySinceMs == 0) chatBusySinceMs = chatTapMs != 0 ? chatTapMs : now;
+    chatTapMs = 0;
+  } else {
+    chatBusySinceMs = 0;
+    if (chatTapMs != 0 && (uint32_t)(now - chatTapMs) >= 8000) chatTapMs = 0;
+  }
+
+  if (chatGui.promptsVersion != chatShownPromptsVersion) {
+    chatShownPromptsVersion = chatGui.promptsVersion;
+    for (int i = 0; i < CHAT_MAX_PROMPTS; ++i) {
+      if (i < chatGui.promptCount) {
+        lv_label_set_text(chatQuickButtonLabels[i], chatGui.promptLabels[i]);
+        lv_obj_clear_flag(chatQuickButtons[i], LV_OBJ_FLAG_HIDDEN);
+      } else {
+        lv_obj_add_flag(chatQuickButtons[i], LV_OBJ_FLAG_HIDDEN);
+      }
+    }
+  }
+  const bool locked = busy || chatTapMs != 0;
+  for (int i = 0; i < CHAT_MAX_PROMPTS; ++i) {
+    if (locked) lv_obj_add_state(chatQuickButtons[i], LV_STATE_DISABLED);
+    else lv_obj_clear_state(chatQuickButtons[i], LV_STATE_DISABLED);
+  }
+
+  if (chatGui.answerSequence != chatShownAnswerSequence) {
+    chatShownAnswerSequence = chatGui.answerSequence;
+    const int8_t idx = chatGui.activePrompt;
+    chatLogPrepend(idx >= 0 && idx < chatGui.promptCount
+                       ? chatGui.promptLabels[idx] : "HERMES",
+                   chatGui.answer);
+    lv_label_set_text(chatQuickLog, chatLog);
+    lv_obj_set_style_text_color(chatQuickLog, lv_color_hex(FG), 0);
+    lv_obj_scroll_to_y(chatQuickLogBox, 0, LV_ANIM_OFF);
+  }
+
+  if (chatTapMs != 0 && !busy) {
+    lv_label_set_text(chatQuickStatus, "SENDE ...");
+    return;
+  }
+  switch (chatGui.phase) {
+    case ChatPhase::LOADING:
+      lv_label_set_text(chatQuickStatus, "LADE BEFEHLE ...");
+      break;
+    case ChatPhase::UNAVAILABLE:
+      lv_label_set_text(chatQuickStatus, "CHAT AUF PI AUS");
+      break;
+    case ChatPhase::SENDING:
+      lv_label_set_text(chatQuickStatus, "SENDE ...");
+      break;
+    case ChatPhase::RUNNING:
+      lv_label_set_text_fmt(chatQuickStatus, "HERMES ARBEITET %lu s",
+                            (unsigned long)((now - chatBusySinceMs) / 1000));
+      break;
+    case ChatPhase::FAILED:
+      lv_label_set_text_fmt(chatQuickStatus, "FEHLER: %s", chatGui.error);
+      break;
+    case ChatPhase::DONE:
+      lv_label_set_text(chatQuickStatus, "ANTWORT DA");
+      break;
+    default:
+      lv_label_set_text(chatQuickStatus, "BEREIT");
+      break;
+  }
+}
+#endif
+
 static void buildUi() {
   lv_obj_t *screen = lv_scr_act();
   lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
@@ -821,7 +977,11 @@ static void buildUi() {
   buildStatusPage(pages[0]);
   buildHistoryPage(pages[1]);
   buildSystemPage(pages[2]);
+#if HT_CHAT_QUICK_ENABLED
+  buildQuickChatPage(pages[CHAT_PAGE]);
+#else
   buildChatPage(pages[3]);
+#endif
   buildVoicePage(pages[VOICE_PAGE]);
 
   static const char *const titles[PAGE_COUNT] =
@@ -1112,6 +1272,13 @@ void loop() {
     lastSampleMs = now;
     sampleStatus(); // read synchronized snapshot and update labels/chart only
   }
+#if HT_CHAT_QUICK_ENABLED
+  static uint32_t lastChatUiMs = 0;
+  if ((uint32_t)(now - lastChatUiMs) >= 250) {
+    lastChatUiMs = now;
+    updateQuickChatUi(); // copies the chat snapshot; never performs HTTPS
+  }
+#endif
 #endif
   delay(5);
 }

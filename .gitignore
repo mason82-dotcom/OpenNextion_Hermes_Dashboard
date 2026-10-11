@@ -14,5 +14,7 @@ build/
 
 # Local TLS PKI (CA/server private keys) and per-device trust/config
 config/tls.env
+# Local quick-command whitelist (template: deploy/chat-prompts.example.json)
+config/chat-prompts.json
 config/pki/
 firmware/HermesTouch/LocalCa.h

@@ -13,6 +13,12 @@
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 #include "LocalCa.h"
+#ifndef HT_CHAT_QUICK_ENABLED
+#define HT_CHAT_QUICK_ENABLED 0
+#endif
+#if HT_CHAT_QUICK_ENABLED
+#include "ChatWorker.h" // whitelisted quick commands, same worker and trust
+#endif
 
 enum class TelemetryPhase : uint8_t {
   STARTING, WIFI_DOWN, CLOCK_WAIT, TLS_CONFIG, HTTP_ERROR, JSON_ERROR,
@@ -160,14 +166,25 @@ static void telemetryTask(void *) {
     // Query from this task only, after the potentially stack-heavy TLS poll.
     snapshot.workerStackMinFreeBytes = (uint32_t)uxTaskGetStackHighWaterMark(nullptr);
     telemetryPublish(snapshot);
+#if HT_CHAT_QUICK_ENABLED
+    // Sequential on this task: never two TLS sessions at the same time.
+    chatService(snapshot.phase == TelemetryPhase::READY);
+    const uint32_t waitMs = chatIsBusy(chatWorkerState.phase)
+                                ? CHAT_POLL_MS : TELEMETRY_PERIOD_MS;
+#else
+    const uint32_t waitMs = TELEMETRY_PERIOD_MS;
+#endif
     // The LVGL thread may wake the worker immediately after a touch.
-    ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(TELEMETRY_PERIOD_MS));
+    ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(waitMs));
   }
 }
 
 static bool telemetryStart() {
   telemetryMutex = xSemaphoreCreateMutex();
   if (telemetryMutex == nullptr) return false;
+#if HT_CHAT_QUICK_ENABLED
+  if (!chatInit()) return false;
+#endif
   const BaseType_t started = xTaskCreate(telemetryTask, "hermes-tls",
                                          14336, nullptr, 1, &telemetryTaskHandle);
   if (started != pdPASS) {

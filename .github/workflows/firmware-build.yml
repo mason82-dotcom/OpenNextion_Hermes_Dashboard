@@ -60,17 +60,16 @@ jobs:
             --build-path "${{ runner.temp }}/hermes-connected-build" \
             firmware/HermesTouch
 
-      # The opt-in local audio and touch-calibration paths are otherwise never
+      # The opt-in audio, touch-calibration and chat paths are otherwise never
       # compiled in CI. Placeholder values only; nothing is uploaded.
-      - name: Compile connected branch with all local diagnostics enabled
+      - name: Compile connected branch with all opt-in features enabled
         run: |
-          sed -e 's/HT_MIC_TEST_ENABLED 0/HT_MIC_TEST_ENABLED 1/' \
-              -e 's/HT_SPEAKER_TEST_ENABLED 0/HT_SPEAKER_TEST_ENABLED 1/' \
-              -e 's/HT_TOUCH_CALIBRATION_ENABLED 0/HT_TOUCH_CALIBRATION_ENABLED 1/' \
+          # Mic, speaker, touch calibration and quick-command chat.
+          sed -e 's/_ENABLED 0$/_ENABLED 1/' \
               firmware/HermesTouch/Config.h.example > firmware/HermesTouch/Config.h
           cp firmware/HermesTouch/LocalCa.h.example firmware/HermesTouch/LocalCa.h
           trap 'rm -f firmware/HermesTouch/Config.h firmware/HermesTouch/LocalCa.h' EXIT
-          test "$(grep -c 'ENABLED 1' firmware/HermesTouch/Config.h)" -eq 3
+          test "$(grep -c 'ENABLED 1' firmware/HermesTouch/Config.h)" -eq 4
           arduino-cli compile \
             --clean \
             --fqbn 'esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB' \

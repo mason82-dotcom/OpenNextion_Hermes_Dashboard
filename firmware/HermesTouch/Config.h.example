@@ -28,3 +28,10 @@
 // Enable only temporarily in private Config.h; allows volatile T0..T7
 // profile selection over 115200 baud USB serial. No saved config or telemetry.
 #define HT_TOUCH_CALIBRATION_ENABLED 0
+
+
+// Optional Hermes QUICK COMMANDS on the CHAT tab, default OFF.
+// The display only sends the ID of a prompt whitelisted on the Pi in
+// config/chat-prompts.json; no free text, no keyboard, no Hermes API key here.
+// Answers stay in RAM only. Requires HT_DEMO_MODE 0. See docs/QUICK-CHAT.md.
+#define HT_CHAT_QUICK_ENABLED 0

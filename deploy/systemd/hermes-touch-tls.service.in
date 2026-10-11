@@ -1,7 +1,8 @@
 # Template rendered by scripts/pi/install-autostart.sh (@ROOT@ = repository).
-# GET-only HTTPS facade on the configured private LAN IP (port 8766).
+# HTTPS facade on the configured private LAN IP (port 8766): exact-path
+# allowlist, GET status/chat reads, POST only with a whitelisted prompt ID.
 [Unit]
-Description=Hermes Touch TLS status service (LAN, GET only)
+Description=Hermes Touch TLS service (LAN, allowlisted paths)
 Wants=hermes-touch-bridge.service
 After=hermes-touch-bridge.service
 StartLimitIntervalSec=0

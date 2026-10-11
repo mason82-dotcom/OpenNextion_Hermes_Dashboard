@@ -2,7 +2,7 @@
 
 **Hermes Touch** – ESP32-S3 Touchscreen für den vorhandenen Hermes-Agent auf dem Raspberry Pi 5.
 
-**Hardwarestand 11.10.2026:** v0.8.3 wurde auf dem ONX3248G035 in Portrait mit 130/130 Tests, Connected-Build und funktionierender PDM-Mikrofon-/NS4168-Lautsprecherdiagnose sowie `TLS OK` bestätigt. Danach wurde der v0.8.4-Landscape-Kandidat (480×320, fünf Tabs STATUS / GRAPH / SYSTEM / CHAT / SPRACHE) auf dem Pi mit 141/141 Tests und Connected-Build geprüft und manuell geflasht. Dabei fiel **diagonal versetzter CST826-Touch** auf. Der USB-Diagnosepatch bestand anschließend **146/146 Tests** und Connected-Build; die gemeldeten realen Rohkoordinaten identifizierten **T1 (`x=rawY`, `y=319-rawX`)** als gewünschtes festes Mapping. **T1 ist jetzt dauerhaft im GitHub-Quellcode hinterlegt; für diesen neuesten Patch fehlen noch erneute Pi-Tests, Connected-Build und abschließende Hardwareprüfung.** Die USB-Kalibrierung bleibt optional und standardmäßig AUS. Textchat und alle Hermes-Schreibzugriffe bleiben gesperrt; Audio-Übertragung gibt es weiterhin nicht.
+**Hardwarestand 11.10.2026:** v0.8.3 wurde auf dem ONX3248G035 in Portrait mit 130/130 Tests, Connected-Build und funktionierender PDM-Mikrofon-/NS4168-Lautsprecherdiagnose sowie `TLS OK` bestätigt. Danach wurde der v0.8.4-Landscape-Kandidat (480×320, fünf Tabs STATUS / GRAPH / SYSTEM / CHAT / SPRACHE) auf dem Pi mit 141/141 Tests und Connected-Build geprüft und manuell geflasht. Dabei fiel **diagonal versetzter CST826-Touch** auf. Der USB-Diagnosepatch bestand anschließend **146/146 Tests** und Connected-Build; die gemeldeten realen Rohkoordinaten identifizierten **T1 (`x=rawY`, `y=319-rawX`)** als gewünschtes festes Mapping. **T1 ist fest im Quellcode hinterlegt und wurde vom Anwender auf der Hardware abgenommen – v0.8.4 Landscape ist damit der bestätigte Hardwarestand.** Die USB-Kalibrierung bleibt optional und standardmäßig AUS. Neu ist ein **optionaler Schnellbefehl-Chat** (standardmäßig AUS): Das Display sendet nur die ID eines auf dem Pi freigegebenen Prompts, nie Freitext – siehe [Schnellbefehle](docs/QUICK-CHAT.md). Freitext-Chat und Audio-Übertragung gibt es weiterhin nicht.
 
 ## Architektur
 
@@ -185,9 +185,22 @@ Die damalige Hochkantbedienung und die Audiofelder innerhalb von CHAT gehören z
 
 Die mit v0.8.3 hardwarebestätigten PDM-Mikrofon- und NS4168-Lautsprecherwege bleiben erhalten; ihre lokale Bedienung wurde auf die neue fünfte Registerkarte **SPRACHE** verschoben. Der separate **CHAT-Tab** zeigt weiterhin nur einen **gesperrten Textchat**. Neu sind **480x320 Landscape**, eine auf 90° transformierte CST826-Toucheingabe, 0–100% begrenzte **Testton-Pegelwahl** (100% = höchstens die zuvor bereits geprüfte leise Amplitude), **STOP** und der weiterhin zeitlich begrenzte viersekündige PTT-Test. Keine Hermes-Audiofunktion, kein TTS, kein Audio über die Bridge und keine Agent-Befehle.
 
-**CST826-T1-Fix:** Die bisherige Transformationsannahme `(479-rawY,rawX)` war auf der realen Hardware diagonal falsch. T1 `(rawY,319-rawX)` ist nach den mit USB erfassten Rohwerten als neuer dauerhafter Standard in `LandscapeTouch.h` gesetzt. Auch der optionale USB-Diagnosemodus startet mit T1; T0 bleibt nur als manuell anwählbare Diagnoseoption. **Der aktuelle Fix muss auf dem Pi neu getestet und kompiliert werden; noch nicht geflasht.** [Touch-Befund und Anleitung](docs/V0.8.4-TOUCH-CALIBRATION.md).
+**CST826-T1-Fix – auf Hardware abgenommen:** Die bisherige Transformationsannahme `(479-rawY,rawX)` war auf der realen Hardware diagonal falsch. T1 `(rawY,319-rawX)` ist nach den mit USB erfassten Rohwerten als dauerhafter Standard in `LandscapeTouch.h` gesetzt und vom Anwender auf dem Gerät bestätigt. Auch der optionale USB-Diagnosemodus startet mit T1; T0 bleibt nur als manuell anwählbare Diagnoseoption. [Touch-Befund und Anleitung](docs/V0.8.4-TOUCH-CALIBRATION.md).
 
 [**v0.8.4 Landscape-/Sprach-Tab-Anleitung und Prüfplan**](docs/V0.8.4-LANDSCAPE-VOICE.md)
+
+## Schnellbefehle im CHAT-Tab (opt-in)
+
+Der CHAT-Tab kann statt der gesperrten Vorschau bis zu **sechs Schnellbefehle** zeigen. Die Texte der Prompts stehen **nur auf dem Pi** in `config/chat-prompts.json`; das Display sendet ausschließlich die ID eines dieser Befehle. Es gibt keinen Freitext, keine Tastatur und keinen Hermes-API-Key auf dem ESP32. Die Bridge erlaubt einen Auftrag gleichzeitig, frühestens alle 15 s und höchstens 20 pro Stunde, und kürzt Antworten auf 700 ASCII-Zeichen. Der Verlauf bleibt nur im RAM des Displays.
+
+```bash
+cp deploy/chat-prompts.example.json config/chat-prompts.json   # anpassen
+systemctl --user restart hermes-touch-bridge hermes-touch-tls
+# Firmware: in der privaten Config.h  #define HT_CHAT_QUICK_ENABLED 1
+bash scripts/pi/firmware-build-connected.sh
+```
+
+[**Schnellbefehle: Sicherheitsmodell, Einrichtung, Grenzen**](docs/QUICK-CHAT.md)
 
 ## 30-Minuten-Stabilitätstest für v0.8 (kein Flashen)
 
@@ -233,8 +246,9 @@ Siehe [docs/PI-SETUP.md](docs/PI-SETUP.md). Die Dateien können auf dem Pi per `
 - v0.8-CHAT-Vorschau (gesperrt) und Offline-Stabilitätsbericht – **83/83 Tests, Connected-Build und Hardwarefoto bestätigt**; Chat bleibt gesperrt
 - v0.8.1: lokaler PDM-Mikrofonpegel – **94/94 Tests und Hardware bestätigt**
 - v0.8.2/v0.8.3: lokaler 4-s-PTT-Test, PCM-Diagnose und NS4168-Testton – **130/130 Tests, Connected-Build und Hardware bestätigt**
-- v0.8.4: Landscape 480×320 mit SPRACHE-Tab und festem CST826-T1-Mapping – **Pi-Tests, Connected-Build und Hardwareabnahme des T1-Patches stehen noch aus**
+- v0.8.4: Landscape 480×320 mit SPRACHE-Tab und festem CST826-T1-Mapping – **Touch auf Hardware abgenommen**
 - Robustheit TLS-Dienst: TLS-Handshake jetzt pro Verbindung im Worker-Thread mit 10-s-Timeout. Vorher konnte eine einzige hängende TCP-Verbindung (Portscan, ESP32 verliert WLAN mitten im Handshake) den Dienst auf Port 8766 dauerhaft blockieren. Nach `git pull` den TLS-Prozess neu starten; Firmware unverändert
-- Nächste Etappe: Tests und inkrementellen v0.8.4-Connected-Build auf dem Pi, dann manuelles Flashen und T1-Touch-Abnahme auf der Hardware
+- Autostart: Bridge und TLS-Dienst als systemd-User-Units mit automatischem Neustart
+- Schnellbefehl-Chat (opt-in): CHAT-Tab mit bis zu sechs auf dem Pi freigegebenen Befehlen, Antworten nur im RAM – **Quellcode, Tests und Compile mit allen Optionen ok; Hardwareabnahme steht aus**
 
 Lizenz: noch festzulegen.
