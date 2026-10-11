@@ -30,7 +30,22 @@ class TestLocalOnlyPushToTalk(unittest.TestCase):
         self.assertIn("lv_obj_add_state(chatPttButton, LV_STATE_DISABLED)", CHAT)
         self.assertIn('"HALTEN: TEST"', CHAT)
         self.assertIn('"PTT: AUS"', CHAT)
-        self.assertRegex(CHAT, r"#if HT_MIC_TEST_ENABLED\s+lv_obj_add_event_cb")
+        # Parse the actual preprocessor branches rather than assuming
+        # there are no comments between #if and the event registration.
+        button_section = CHAT.split("chatPttButton = lv_btn_create(p)", 1)[1].split(
+            "lv_obj_t *pttText =", 1,
+        )[0]
+        enabled_block = button_section.split("#if HT_MIC_TEST_ENABLED", 1)[1].split(
+            "#else", 1,
+        )[0]
+        disabled_block = button_section.split("#else", 1)[1].split("#endif", 1)[0]
+        for event in ("LV_EVENT_PRESSED", "LV_EVENT_RELEASED", "LV_EVENT_PRESS_LOST"):
+            self.assertIn(
+                "lv_obj_add_event_cb(chatPttButton, onPttTouch, " + event,
+                enabled_block,
+            )
+        self.assertNotIn("lv_obj_add_event_cb(chatPttButton", disabled_block)
+        self.assertIn("lv_obj_add_state(chatPttButton, LV_STATE_DISABLED)", disabled_block)
 
     def test_press_release_and_press_lost_are_handled(self):
         self.assertIn("static void onPttTouch(lv_event_t *event)", FIRMWARE)
