@@ -21,7 +21,7 @@ class TestChatUiShell(unittest.TestCase):
     def test_chat_remains_visibly_disabled(self):
         self.assertIn('"CHAT IST DEAKTIVIERT"', CHAT)
         self.assertIn('"NUR VORSCHAU / KEIN VERSAND"', CHAT)
-        self.assertIn('"Keine Agent-Befehle oder"', CHAT)
+        self.assertIn('"Keine Agent-Befehle oder Schreibzugriffe aktiviert."', CHAT)
 
     def test_scrollable_transcript_shell_and_empty_state(self):
         self.assertIn("lv_obj_t *chatHistory = lv_obj_create(p)", CHAT)
