@@ -9,6 +9,7 @@ SKETCH="$ROOT/firmware/HermesTouch"
 BUILD="$ROOT/build/firmware-connected"
 LOG_DIR="$ROOT/build/logs"
 LOG="$LOG_DIR/firmware-connected-build.log"
+MANIFEST="$BUILD/.connected-sources.sha256"
 FQBN="esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB"
 
 if [[ ! -s "$SKETCH/Config.h" || ! -s "$SKETCH/LocalCa.h" ]]; then
@@ -35,8 +36,20 @@ mkdir -p "$BUILD" "$LOG_DIR"
 chmod 700 "$BUILD" "$LOG_DIR"
 printf 'Compiling connected TLS firmware using the incremental Arduino build cache...\n'
 printf 'No passwords, tokens or private certificates will be printed.\n'
+# A failed or interrupted build must invalidate the previous upload approval.
+rm -f -- "$MANIFEST"
 if arduino-cli compile --fqbn "$FQBN" \
      --build-path "$BUILD" "$SKETCH" > "$LOG" 2>&1; then
+  # Only after a successful compile, seal the exact header/sketch/config bytes.
+  # Content hashing also detects files whose mtime is unchanged or backdated.
+  if [[ ! -s "$BUILD/HermesTouch.ino.bin" ]]; then
+    printf 'REFUSED: Arduino CLI returned success without an application binary.\n' >&2
+    exit 1
+  fi
+  INPUT_HASH="$(python3 "$ROOT/scripts/pi/firmware-source-fingerprint.py")" || exit 1
+  printf '%s\n' "$INPUT_HASH" > "$MANIFEST.tmp"
+  chmod 600 "$MANIFEST.tmp"
+  mv -f -- "$MANIFEST.tmp" "$MANIFEST"
   printf 'CONNECTED COMPILE OK. Artifacts kept private in build/firmware-connected.\n'
   printf 'Application binary: %s\n' "$BUILD/HermesTouch.ino.bin"
   printf 'NOTHING FLASHED.\n'
