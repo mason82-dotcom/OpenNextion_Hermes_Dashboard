@@ -172,21 +172,14 @@ Die nächste Version greift die Hersteller-Interaktion aus **[OpenNextion `07_mi
 
 [**PTT-Konzept, Hardwareprüfung und Sicherheitsgrenzen**](docs/V0.8.2-LOCAL-PTT.md)
 
-## v0.8.3 in Entwicklung – PCM-/PSRAM-Diagnose (nur lokal)
+## v0.8.3 – Bestätigte lokale PCM-Diagnose und NS4168-Ausgabe
 
-Auf Basis der auf Hardware bestätigten v0.8.2 ergänzt v0.8.3 **nur eine lokale, aggregierte PTT-Diagnose**: Anzahl tatsächlich gepufferter PCM-Samples, verstrichene Aufnahmezeit, grob beobachteter Sample-Durchsatz, Verhältnis zum 16-kHz-Soll, RMS, Peak und Anteil nahezu voll ausgesteuerter Samples sowie PSRAM frei **vor/minimal während/nach** dem Test. Im PTT-Taster erscheint ein 4-Sekunden-Fortschrittsbalken. Die deaktivierte Chat-Oberfläche, HTTPS-CA, die Vier-Sekunden-/128-KB-Grenze und das automatische Verwerfen der temporären PCM-Daten bleiben erhalten. Ein host-kompilierter C++-Mathematiktest prüft die echte Berechnung in `MicAudioMetrics.h`. Die Daten belegen **keine lückenlose Aufnahmequalität**.
+Der Raspberry Pi hat die v0.8.3 mit **130/130 Tests und `CONNECTED COMPILE OK`** geprüft. Auf dem echten OpenNextion bestätigte der Anwender die 4-Sekunden-PTT-Funktion, gemessene PCM-Samplezahlen, RMS/Peak/Clip-Anteil sowie den temporären PSRAM-Verbrauch und die anschließende Freigabe. Ein **hörbarer NS4168-Testton** einschließlich `SPK: OK 1` und weiter funktionierendem Mikrofonpegel wurde ebenfalls überprüft. Damit bildet **v0.8.3 den zuletzt bestätigten Hardwarestand**.
 
-**Reine PCM-Diagnose:** 118/118 Pi-Tests und Connected-Build inzwischen bestätigt; **mit Lautsprecher-Ausgabe neuer Quellstand**, für den nun **130 Tests und ein frischer Build** erforderlich sind. **Nicht automatisch flashen.**
+Die damalige Hochkantbedienung und die Audiofelder innerhalb von CHAT gehören zur **historischen v0.8.3**; ab v0.8.4 werden beide Audiowege vollständig auf den eigenständigen Tab **SPRACHE** verlegt.
 
-[**v0.8.3 Testablauf, Grenzen und Erläuterung der Messwerte**](docs/V0.8.3-AUDIO-DIAGNOSTICS.md)
-
-## Parallel zu v0.8.3 – Lokale Audioausgabe über NS4168
-
-Der Hersteller-[Arduino-Mikrofontest für ONX3248G035](https://github.com/OpenNextion/OpenNextion-SKU-ONX3248G035/tree/main/Example%20Programs/ESP-Arduino/07_microphone_test) verwendet neben PDM-Mikrofoneingang auch **I²S1-Lautsprecherausgabe** und PCF8574-Verstärkersteuerung. In Hermes Touch lässt sich der Ausgang unabhängig und ausdrücklich nur **privat** mit `#define HT_SPEAKER_TEST_ENABLED 1` aktivieren (ohne Schalter **AUS**). Im scrollbaren CHAT-Diagnosefeld wird dann eine **TESTTON**-Taste nutzbar: Ein Tap gibt einen niedrigpegeligen **250-ms-Sinuston mit 660 Hz** aus. Der I²S-Ausgabetask erhält **keinerlei PTT-PCM oder Hermes-Text**; die Lautsprecherstufe wird im Hauptthread vor/nach dem Ton über einen gemeinsam genutzten PCF8574-Schattenwert geschaltet, ohne LCD-Reset zu beeinflussen.
-
-**Neu und noch nicht hardwaregetestet:** Erst nach manueller Aktivierung und einem frischen Connected-Build sowie **130 erwarteten Python-Tests** wäre ein späterer manueller Upload möglich. Es wird keine Hermes-Sprachwiedergabe oder Chat-Freigabe vorgenommen.
-
-[**Setup, Herstellerpins, Mikrofon-Koexistenz und Tests**](docs/V0.8.3-SPEAKER-OUTPUT.md)
+[**v0.8.3 PCM-Diagnose**](docs/V0.8.3-AUDIO-DIAGNOSTICS.md) ·
+[**v0.8.3 Lautsprecherausgabe**](docs/V0.8.3-SPEAKER-OUTPUT.md)
 
 ## v0.8.4 – Landscape mit eigenem SPRACHE-Tab (Quellcode-Kandidat)
 
