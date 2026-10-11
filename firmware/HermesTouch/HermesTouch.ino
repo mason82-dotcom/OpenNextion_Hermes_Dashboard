@@ -214,6 +214,8 @@ static void onNav(lv_event_t *event) {
 static void onPttTouch(lv_event_t *event) {
 #if HT_MIC_TEST_ENABLED
   const lv_event_code_t code = lv_event_get_code(event);
+  // Mirror the official ONX3248G035 07_microphone_test touch lifecycle:
+  // PRESSED -> start, LONG_PRESSED -> continue, RELEASED/PRESS_LOST -> stop.
   if (code == LV_EVENT_PRESSED && activePage == 3) {
     ++touchActions;
     micPttSetHeld(true);
@@ -386,7 +388,11 @@ static void buildChatPage(lv_obj_t *p) {
   lv_obj_set_size(chatPttButton, 145, 39);
   styleButton(chatPttButton, 0x157EAD);
 #if HT_MIC_TEST_ENABLED
-  lv_obj_add_event_cb(chatPttButton, onPttTouch, LV_EVENT_ALL, nullptr);
+  // Register exactly the lifecycle events used by OpenNextion's official
+  // 07_microphone_test; do not dispatch unrelated LVGL events to PTT.
+  lv_obj_add_event_cb(chatPttButton, onPttTouch, LV_EVENT_PRESSED, nullptr);
+  lv_obj_add_event_cb(chatPttButton, onPttTouch, LV_EVENT_RELEASED, nullptr);
+  lv_obj_add_event_cb(chatPttButton, onPttTouch, LV_EVENT_PRESS_LOST, nullptr);
   chatPttStatus = label(p, "PTT: BEREIT", 165, 204, 145, MUTED);
 #else
   lv_obj_add_state(chatPttButton, LV_STATE_DISABLED);
