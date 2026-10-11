@@ -90,6 +90,7 @@ static uint8_t expanderShadow = 0xFF;
 #if HT_SPEAKER_TEST_ENABLED
 static bool speakerAmpOn = false;
 static bool speakerToneStartAttempted = false;
+static bool speakerToneStartFailed = false;
 #endif
 static lv_disp_draw_buf_t drawBuf;
 static lv_disp_drv_t dispDrv;
@@ -449,7 +450,10 @@ static void buildChatPage(lv_obj_t *p) {
   lv_obj_set_size(chatSpeakerButton, 135, 40);
   styleButton(chatSpeakerButton, 0x176A98);
 #if HT_SPEAKER_TEST_ENABLED
-  lv_obj_add_event_cb(chatSpeakerButton, onSpeakerTest, LV_EVENT_CLICKED, nullptr);
+  if (expanderAvailable)
+    lv_obj_add_event_cb(chatSpeakerButton, onSpeakerTest, LV_EVENT_CLICKED, nullptr);
+  else
+    lv_obj_add_state(chatSpeakerButton, LV_STATE_DISABLED);
   chatSpeakerStatus = label(chatHistory, "SPK: STARTET", 155, 149, 127, MUTED);
 #else
   lv_obj_add_state(chatSpeakerButton, LV_STATE_DISABLED);
@@ -632,6 +636,12 @@ static void updateMicUi() {
 // the PCF8574 I2C amp-enable pin is never toggled by a FreeRTOS worker.
 static void updateSpeakerUi() {
 #if HT_SPEAKER_TEST_ENABLED
+  if (!expanderAvailable || speakerToneStartFailed) {
+    if (chatSpeakerStatus != nullptr)
+      lv_label_set_text(chatSpeakerStatus,
+                        expanderAvailable ? "SPK: FEHLER" : "SPK: PCF FEHLT");
+    return;
+  }
   SpeakerToneSnapshot output;
   if (!speakerToneRead(output)) return;
   // Force mute on startup, completion, errors or loss of the output worker.
@@ -913,8 +923,10 @@ void setup() {
 #if HT_SPEAKER_TEST_ENABLED && !HT_MIC_TEST_ENABLED
   // With no mic enabled, I2S1 can initialize immediately.
   speakerToneStartAttempted = true;
-  if (expanderAvailable && !speakerToneStart())
+  if (expanderAvailable && !speakerToneStart()) {
+    speakerToneStartFailed = true;
     Serial.println("WARN: local speaker tone worker could not start");
+  }
 #endif
   sampleStatus();
   lastSampleMs = millis();
@@ -943,8 +955,10 @@ void loop() {
     if (micLevelRead(micForSpeaker) &&
         (micForSpeaker.ready || micForSpeaker.failed)) {
       speakerToneStartAttempted = true;
-      if (!speakerToneStart())
+      if (!speakerToneStart()) {
+        speakerToneStartFailed = true;
         Serial.println("WARN: local speaker tone worker could not start");
+      }
     }
   }
 #endif
