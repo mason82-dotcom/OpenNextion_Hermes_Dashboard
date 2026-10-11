@@ -74,11 +74,25 @@ class FirmwareContractTests(unittest.TestCase):
         self.assertNotIn("HT_HERMES_API_KEY", WORKER)
         self.assertIn("DeserializationOption::NestingLimit(8)", WORKER)
 
-    def test_four_touch_pages(self):
-        self.assertIn("PAGE_COUNT = 4", FIRMWARE)
-        for text in ('"STATUS"', '"GRAPH"', '"SYSTEM"', '"CHAT"'):
-            self.assertIn(text, FIRMWARE)
+    def test_five_landscape_pages_with_separate_voice_tab(self):
+        # v0.8.4 has a dedicated local SPRACHE tab, distinct from
+        # the disabled text CHAT tab. Keep the count and array bounds aligned.
+        self.assertIn("PAGE_COUNT = 5", FIRMWARE)
+        self.assertIn("VOICE_PAGE = 4", FIRMWARE)
+        self.assertIn("static lv_obj_t *pages[PAGE_COUNT]", FIRMWARE)
+        self.assertIn("static lv_obj_t *navBtns[PAGE_COUNT]", FIRMWARE)
+        self.assertIn(
+            '{"STATUS", "GRAPH", "SYSTEM", "CHAT", "SPRACHE"}', FIRMWARE
+        )
+        self.assertIn("buildChatPage(pages[3])", FIRMWARE)
+        self.assertIn("buildVoicePage(pages[VOICE_PAGE])", FIRMWARE)
         self.assertIn("lv_obj_add_event_cb(navBtns[i], onNav", FIRMWARE)
+        self.assertIn("lv_obj_set_pos(navBtns[i], 5 + i * 95, 39)", FIRMWARE)
+        self.assertIn("lv_obj_set_size(navBtns[i], 90, 35)", FIRMWARE)
+        self.assertIn("gfx->setRotation(1)", FIRMWARE)
+        self.assertIn("SCREEN_W = LCD_V_RES", FIRMWARE)
+        self.assertIn("SCREEN_H = LCD_H_RES", FIRMWARE)
+        self.assertIn("if (page != VOICE_PAGE) micPttSetHeld(false)", FIRMWARE)
 
     def test_real_measurements_and_chart(self):
         self.assertIn("ESP.getFreeHeap()", FIRMWARE)
