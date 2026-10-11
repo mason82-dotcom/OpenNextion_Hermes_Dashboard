@@ -16,13 +16,16 @@ MIC = (SKETCH.parent / "MicLevelWorker.h").read_text(encoding="utf-8")
 MATH = (SKETCH.parent / "MicAudioMetrics.h").read_text(encoding="utf-8")
 WORKER = (SKETCH.parent / "TelemetryWorker.h").read_text(encoding="utf-8")
 CHAT = FIRMWARE.split("static void buildChatPage(lv_obj_t *p) {", 1)[1].split(
-    "\nstatic void updateMicUi()", 1,
+    "\nstatic void buildVoicePage(", 1,
+)[0]
+VOICE = FIRMWARE.split("static void buildVoicePage(lv_obj_t *p) {", 1)[1].split(
+    "\n// Read aggregate audio level only;", 1,
 )[0]
 
 
 class MicAudioDiagnosticsTests(unittest.TestCase):
     def test_version_and_mic_opt_in(self):
-        self.assertIn('label(screen, "v0.8.3 | ONX3248G035"', FIRMWARE)
+        self.assertIn('label(screen, "v0.8.4 | 480x320"', FIRMWARE)
         self.assertIn("#ifndef HT_MIC_TEST_ENABLED\n#define HT_MIC_TEST_ENABLED 0", FIRMWARE)
         self.assertIn('#if HT_MIC_TEST_ENABLED\n#include "MicLevelWorker.h"', FIRMWARE)
 
@@ -85,18 +88,18 @@ class MicAudioDiagnosticsTests(unittest.TestCase):
         self.assertIn('pttPsramAfterBytes = 0; // "after" unavailable while recording', MIC)
         self.assertIn("pttLastSamples = 0", MIC)
 
-    def test_diagnostics_in_scrollable_chat_shell_without_shifted_navigation(self):
-        self.assertIn("lv_obj_set_scroll_dir(chatHistory, LV_DIR_VER)", CHAT)
-        self.assertIn('"LOKALE AUDIO-DIAGNOSE"', CHAT)
+    def test_diagnostics_are_on_separate_voice_tab_in_landscape(self):
+        self.assertIn('label(diag, "PCM-DIAGNOSE"', VOICE)
         for diag in ("chatDiagPcm", "chatDiagRate", "chatDiagRms", "chatDiagPsram"):
-            self.assertIn(diag + " = label(chatHistory,", CHAT)
-        self.assertIn("lv_obj_set_pos(chatPttButton, 10, 194)", CHAT)
-        self.assertIn("lv_obj_set_pos(chatInput, 10, 273)", CHAT)
-        self.assertIn("lv_obj_set_pos(chatSend, 233, 273)", CHAT)
+            self.assertIn(diag + " = label(diag,", VOICE)
+        self.assertIn("lv_obj_set_pos(chatPttButton, 10, 49)", VOICE)
+        self.assertIn("lv_obj_set_pos(chatInput, 10, 157)", CHAT)
+        self.assertIn("lv_obj_set_pos(chatSend, 368, 157)", CHAT)
+        self.assertNotIn("chatDiagPcm", CHAT)
 
     def test_progress_bar_is_bounded_and_only_gui_owned(self):
-        self.assertIn("chatPttProgress = lv_bar_create(chatPttButton)", CHAT)
-        self.assertIn("lv_bar_set_range(chatPttProgress, 0, 4000)", CHAT)
+        self.assertIn("chatPttProgress = lv_bar_create(chatPttButton)", VOICE)
+        self.assertIn("lv_bar_set_range(chatPttProgress, 0, 4000)", VOICE)
         self.assertIn("mic.pttDurationMs > MIC_PTT_MAX_MS", FIRMWARE)
         self.assertIn("lv_bar_set_value(chatPttProgress,", FIRMWARE)
         self.assertNotIn("lv_", MIC)
