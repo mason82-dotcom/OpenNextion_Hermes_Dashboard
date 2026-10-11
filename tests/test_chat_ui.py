@@ -42,8 +42,9 @@ class TestChatUiShell(unittest.TestCase):
     def test_chat_all_widgets_fit_before_navigation(self):
         # Page inner coordinate area: 320 x 352, bottom navigation follows.
         for x, y, w, h in (
-            (10, 64, 300, 155),
-            (10, 231, 300, 35),
+            (10, 64, 300, 125),
+            (10, 194, 145, 39),
+            (10, 236, 300, 32),
             (10, 273, 215, 48),
             (233, 273, 77, 48),
         ):
@@ -52,8 +53,8 @@ class TestChatUiShell(unittest.TestCase):
                 self.assertLessEqual(x + w, 320)
                 self.assertLessEqual(y + h, 352)
         self.assertIn("lv_obj_set_pos(chatHistory, 10, 64)", CHAT)
-        self.assertIn("lv_obj_set_size(chatHistory, 300, 155)", CHAT)
-        self.assertIn("lv_obj_t *micCard = card(p, 10, 231, 300, 35)", CHAT)
+        self.assertIn("lv_obj_set_size(chatHistory, 300, 125)", CHAT)
+        self.assertIn("lv_obj_t *micCard = card(p, 10, 236, 300, 32)", CHAT)
         self.assertIn("lv_obj_set_pos(chatInput, 10, 273)", CHAT)
         self.assertIn("lv_obj_set_pos(chatSend, 233, 273)", CHAT)
         self.assertIn("lv_obj_set_size(chatSend, 77, 48)", CHAT)
