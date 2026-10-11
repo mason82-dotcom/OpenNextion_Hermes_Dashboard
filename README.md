@@ -154,6 +154,16 @@ python3 scripts/pi/stability_report.py --latest
 
 [**Auswertung und Grenzwerte**](docs/V0.7-STABILITY-TEST.md)
 
+## v0.8.1 in Entwicklung: Nextion Dual MIC Board – lokaler Pegeltest
+
+Das Nextion Dual MIC Board ist inzwischen physisch am ONX3248G035 angeschlossen. Im **neuen, noch nicht kompilierten und nicht geflashten Quellcode-Kandidaten v0.8.1** ist ein rein lokaler PDM-Pegeltest vorgesehen: **CLK GPIO19**, **DATA GPIO20**, Arduino-ESP32 3.3.2 `ESP_I2S`, eigener FreeRTOS-Task. Im CHAT-Reiter erscheint ein Pegelbalken und die zuvor auffällig helle deaktivierte Eingabe wurde dunkel gestaltet.
+
+**Die Aufnahme bleibt standardmäßig AUS (`HT_MIC_TEST_ENABLED=0`).** Zum Hardwaretest muss diese Option später ausdrücklich in der privaten `firmware/HermesTouch/Config.h` aktiviert, der Connected-Build erneut erstellt und das Gerät manuell geflasht werden. Audio wird weder gespeichert noch übertragen; nur der relative Pegel wird an die lokale Oberfläche übergeben. Hermes-CHAT bleibt vollständig gesperrt.
+
+**Nächster Prüfschritt:** **94 Python-Tests erwartet** (83 bereits bestätigt, 2 neue UI-Tests, 9 Mikrofon-Tests) und inkrementeller Connected-Build. Keine laufenden Dienste ändern und nicht automatisch flashen.
+
+[**v0.8.1 PDM-Mikrofon: Sicherheit, Aktivierung und Testablauf**](docs/V0.8.1-MIC-VU.md)
+
 ## 30-Minuten-Stabilitätstest für v0.8 (kein Flashen)
 
 Nach dem bestätigten TLS-Ausfall- und Wiederherstellungstest kann die Pi-Seite mit einem **lokalen, lesenden HTTPS-Monitor** über 30 Minuten geprüft werden. Das Tool zeichnet Antwortzeiten, Ausfälle und ausgewählte Pi-Messwerte im ignorierten `build/stability/`-Verzeichnis auf. Ergänzend müssen die ESP32-Heap- und PSRAM-Werte am Anfang und am Ende direkt auf der SYSTEM-Seite verglichen werden – der Pi-Monitor kann diese nicht auslesen.
@@ -185,6 +195,7 @@ Siehe [docs/PI-SETUP.md](docs/PI-SETUP.md). Die Dateien können auf dem Pi per `
 - v0.7.1: SHA-256-Fingerabdruck für Connected-Build/Upload einschließlich `TelemetryWorker.h`, Healthcheck-Cache mit 45-s-Gültigkeitsdauer – **56/56 Tests, Connected-Build und frischer Cache über HTTPS am Pi bestätigt**; kein Flash erforderlich
 - v0.8: SYSTEM-Diagnose (Heap-Minimum, größter Block, HTTPS-Task-Stackreserve) – **64/64 Tests, Connected-Build und erste Hardwaremessungen bestätigt**, Graph mit 24/24 echten Pi-Temperaturwerten
 - Neue Entwicklung: strikt deaktivierte CHAT-Vorschau (Verlauf, Eingabefeld, SENDEN-Sperre) und rein lokale Qualitätsauswertung der Pi-HTTPS-Messreihe; **Tests/Build für diese Erweiterung stehen noch aus**. Chat bleibt gesperrt
-- Nächste Etappe: laufenden 30-Minuten-Test abschließen, Quality-Report auswerten, dann 83 Tests und neuen inkrementellen Build auf dem Pi prüfen
+- v0.8.1 (noch ungeprüfter Quellcode-Kandidat): lokaler PDM-Mikrofonpegel, separat aktivierbar und ohne Audio-/Chat-Übertragung; gesperrte CHAT-Eingabe jetzt dunkel formatiert
+- Nächste Etappe: 94 erwartete Tests und inkrementellen v0.8.1-Build auf dem Pi prüfen; erst dann den lokalen Mikrofontest bewusst aktivieren und das Board manuell flashen
 
 Lizenz: noch festzulegen.
