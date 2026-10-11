@@ -1,7 +1,7 @@
 """v0.8.4 hardware-specific CST826 touch diagnosis without speculative rotation.
 
-Pure coordinate profiles are host-compiled; physical raw ranges and the best
-profile remain unverified until user-supplied measurements from OpenNextion.
+Pure coordinate profiles are host-compiled. User-supplied real CST826
+corner measurements selected T1 as the permanent production mapping.
 """
 from pathlib import Path
 import shutil
@@ -22,7 +22,7 @@ class TouchCalibrationTests(unittest.TestCase):
         self.assertIn("#define HT_TOUCH_CALIBRATION_ENABLED 0", CONFIG_EXAMPLE)
         self.assertIn("#ifndef HT_TOUCH_CALIBRATION_ENABLED\n#define HT_TOUCH_CALIBRATION_ENABLED 0", FIRMWARE)
         self.assertIn('#error "HT_TOUCH_CALIBRATION_ENABLED must be 0 or 1"', FIRMWARE)
-        self.assertIn("static uint8_t touchCalibProfile = 0", FIRMWARE)
+        self.assertIn("static uint8_t touchCalibProfile = 1", FIRMWARE)
         self.assertIn("#if HT_TOUCH_CALIBRATION_ENABLED", FIRMWARE)
 
     def test_diagnostic_reports_raw_and_mapped_coordinates_only_on_usb(self):
@@ -38,17 +38,20 @@ class TouchCalibrationTests(unittest.TestCase):
         self.assertIn("byte >= '0' && byte <= '7'", FIRMWARE)
         self.assertIn("touchCalibProfile = static_cast<uint8_t>(byte - '0')", FIRMWARE)
         self.assertIn("touchCalibCommandOpen = (byte == 'T')", FIRMWARE)
-        self.assertIn('TOUCH: PROFIL 0', FIRMWARE)
+        self.assertIn('TOUCH: PROFIL 1', FIRMWARE)
         for forbidden in ("Preferences", "EEPROM", "NVS", "nvs_set_", "fwrite(", "SD.open("):
             self.assertNotIn(forbidden, TOUCH)
         for forbidden in ("WiFi", "HTTP", "lv_", "Serial"):
             self.assertNotIn(forbidden, TOUCH)
 
-    def test_original_math_preserved_as_profile_zero(self):
+    def test_production_math_uses_t1_and_t0_remains_diagnostic(self):
         self.assertIn("mapNativeTouchToLandscape(rawX, rawY, nativeWidth, nativeHeight)", TOUCH)
         self.assertIn("return mapNativeTouchToLandscape(rawX, rawY,", TOUCH)
         self.assertIn("mapTouchWithProfile(", TOUCH)
-        self.assertIn("if (profile == 0)", TOUCH)
+        self.assertIn("if (profile == 1)", TOUCH)
+        self.assertIn("if (profile == 0 || profile == 6 || profile == 7)", TOUCH)
+        self.assertIn("static_cast<int16_t>(py)", TOUCH)
+        self.assertIn("nativeWidth - 1 - px", TOUCH)
         self.assertIn("SCREEN_W = LCD_V_RES", FIRMWARE)
         self.assertIn("gfx->setRotation(1)", FIRMWARE)
 
@@ -75,7 +78,15 @@ int main() {
   eq(-1,10000,0,0,0);
   eq(500,500,2,479,319);
   eq(-1,-1,2,0,0);
-  eq(50,100,255,379,50);
+  eq(50,100,255,100,269); // unknown profiles fall back to production T1
+  auto p=mapNativeTouchToLandscape(319,31);
+  assert(p.x==31 && p.y==0);
+  p=mapNativeTouchToLandscape(12,462);
+  assert(p.x==462 && p.y==307);
+  p=mapTouchWithProfile(319,31,1);
+  assert(p.x==31 && p.y==0);
+  p=mapTouchWithProfile(12,462,1);
+  assert(p.x==462 && p.y==307);
   return 0;
 }
 """
