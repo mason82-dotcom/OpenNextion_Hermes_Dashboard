@@ -5,6 +5,7 @@
 #include <Arduino.h>
 #include <driver/i2s_std.h>
 #include <atomic>
+#include <cstring>
 #include <math.h>
 #include "BoardConfig.h"
 
