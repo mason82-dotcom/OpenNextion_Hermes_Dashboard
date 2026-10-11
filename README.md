@@ -2,7 +2,7 @@
 
 **Hermes Touch** – ESP32-S3 Touchscreen für den vorhandenen Hermes-Agent auf dem Raspberry Pi 5.
 
-**Aktueller Projektstand: v0.7.1 (Pi-Bridge und Build-/Upload-Sicherheit), ESP32-Firmware weiterhin v0.7.** Auf dem Raspberry Pi 5 wurden **56/56 Tests in 1,448 s erfolgreich ausgeführt** und der Connected-Build mit inkrementellem Arduino-Cache als `CONNECTED COMPILE OK` bestätigt; es wurde **nichts geflasht**. Die beiden v0.7.1-Korrekturen sind damit durch Tests und Build verifiziert. Nach Neustart der Bridge und des TLS-Dienstes wurden CA-/IP-geprüftes HTTPS, Hermes-API, Dashboard, Gateway und der **frische Healthcheck-Cache (`probe_fresh: True`, Alter 14,6 s)** im Livebetrieb bestätigt. Der Ablauf des 45-s-Cache-Zeitfensters ist durch Regressionstests abgesichert, aber noch **nicht gezielt am laufenden Pi durch einen simulierten Probe-Ausfall nachgewiesen**. Die v0.7-Firmware hat auf echter OpenNextion-Hardware Normalbetrieb, kontrollierten TLS-Ausfall und automatische Wiederherstellung bei flüssiger Touch-Bedienung bestanden. **Noch offen:** vollständiger 30-Minuten-Stabilitätstest, 45-s-Cache-Fehlerfall am laufenden Pi und objektive Touch-Latenzmessung.
+**Aktueller Projektstand: v0.8 läuft auf dem OpenNextion ONX3248G035; neue CHAT-Vorschau im GitHub-Quellstand noch nicht geflasht.** Der Anwender hat **64/64 Python-Tests (1,391 s)** und einen erfolgreichen **inkrementellen Connected-Firmware-Build** auf dem Raspberry Pi bestätigt und v0.8 anschließend auf Hardware gestartet. SYSTEM zeigt die zusätzlichen Heap-/Stack-Messungen; nach 13 Minuten Laufzeit wurden **172 KB freier Heap, 127 KB Minimum, 127 KB größter interner Block und 9.348 B TLS-Task-Stackreserve** gemessen. STATUS meldet `TLS OK`; GRAPH zeigte **52,9 °C bei 24/24 echten Messpunkten**. Der 30-Minuten-Pi-HTTPS-Stabilitätstest wurde gestartet; **die Abschlusszusammenfassung liegt hier noch nicht vor**. Neu im Repo: vorbereitete, weiterhin strikt **deaktivierte** CHAT-Eingabe und eine **offline** auswertbare Pi-Stabilitätsbewertung. Diese neuen Quellcode-Erweiterungen erfordern vor einem späteren optionalen Upload einen frischen Test-/Buildlauf. Hermes bleibt read-only, Chat-Versand gesperrt.
 
 ## Architektur
 
@@ -126,9 +126,9 @@ Die Pi-Bridge markiert gecachte Hermes-Healthchecks nach **45 Sekunden ohne voll
 
 ## In Entwicklung: Hermes Touch v0.8 – ESP32-Diagnose
 
-Die neue **v0.8-Firmware ist Quellcode-Kandidat, noch nicht auf dem Pi kompiliert oder auf dem OpenNextion geflasht**. Auf der SYSTEM-Seite stehen künftig zusätzlich der kleinste seit Boot beobachtete freie Heap, der größte zusammenhängende interne Heapblock und die im HTTPS-FreeRTOS-Task ermittelte minimale Stackreserve in Bytes. Laufzeit, PSRAM und Touch-Aktionen bleiben sichtbar. Die Status-/Graph-/Chat-Seiten und alle bisherigen read-only TLS-Sicherheitsgrenzen bleiben unverändert.
+Die **v0.8-Diagnose-Firmware wurde mit 64/64 Tests und erfolgreichem Connected-Build auf dem Pi geprüft und auf dem OpenNextion in Betrieb genommen**. Die anschließend vorbereitete CHAT-Vorschau ist dagegen **neuer Quellcode, noch nicht neu kompiliert oder auf dem Gerät installiert**. Auf der SYSTEM-Seite stehen künftig zusätzlich der kleinste seit Boot beobachtete freie Heap, der größte zusammenhängende interne Heapblock und die im HTTPS-FreeRTOS-Task ermittelte minimale Stackreserve in Bytes. Laufzeit, PSRAM und Touch-Aktionen bleiben sichtbar. Die Status-/Graph-/Chat-Seiten und alle bisherigen read-only TLS-Sicherheitsgrenzen bleiben unverändert.
 
-**Nächster Prüfschritt:** auf dem Pi **64 erwartete Tests** (56 bisherige plus 8 neue Quellcode-Regressionstests) ausführen und den **inkrementellen** Connected-Build überprüfen. Ein Update auf dem Gerät erfolgt weiterhin nur nach separater manueller Flash-Bestätigung.
+**Nächster Prüfschritt für den neuen Repo-Stand:** **83 erwartete Tests** (64 bereits erfolgreich, 6 neue CHAT-Sicherheitstests, 13 neue Offline-Stabilitätsauswertungstests) sowie ein **inkrementeller** Connected-Build. Kein Update auf dem Gerät ohne separate manuelle Flash-Bestätigung.
 
 [**v0.8 – Diagnosefunktionen, Tests und Hardware-Abnahme**](docs/V0.8-DIAGNOSTICS.md)
 
@@ -140,7 +140,21 @@ bash scripts/pi/firmware-build-connected.sh
 # NICHT AUTOMATISCH FLASHEN
 ```
 
-## 30-Minuten-Stabilitätstest für v0.7 (kein Flashen)
+## Nächste v0.8-Erweiterungen: CHAT-Vorschau und offline Stabilitätsbericht
+
+Der CHAT-Reiter erhält einen scrollbaren **leeren Verlauf**, eine sichtbare, aber deaktivierte Eingabe sowie eine **gesperrte SENDEN-Taste ohne Callback**. Weder Nachrichten noch Befehle gelangen an den Hermes-Agent. **Das neue UI ist noch nicht geflasht.**
+
+[**CHAT-Vorschau und notwendige Sicherheitsfreigaben**](docs/V0.8-CHAT-PREVIEW.md)
+
+Der neue Offline-Auswerter beurteilt die bereits vom Pi-Monitor erzeugte `.summary.json` nach transparenten Kriterien als `PASS`, `WARN`, `FAIL` oder `INCOMPLETE`. Er prüft nur den **Pi-HTTPS-Pfad**, nicht die ESP32-Speicherwerte, und startet keine neuen Netzwerkabfragen. **Erst nach Beendigung des laufenden Tests** und dem nächsten `git pull` ausführen:
+
+```bash
+python3 scripts/pi/stability_report.py --latest
+```
+
+[**Auswertung und Grenzwerte**](docs/V0.7-STABILITY-TEST.md)
+
+## 30-Minuten-Stabilitätstest für v0.8 (kein Flashen)
 
 Nach dem bestätigten TLS-Ausfall- und Wiederherstellungstest kann die Pi-Seite mit einem **lokalen, lesenden HTTPS-Monitor** über 30 Minuten geprüft werden. Das Tool zeichnet Antwortzeiten, Ausfälle und ausgewählte Pi-Messwerte im ignorierten `build/stability/`-Verzeichnis auf. Ergänzend müssen die ESP32-Heap- und PSRAM-Werte am Anfang und am Ende direkt auf der SYSTEM-Seite verglichen werden – der Pi-Monitor kann diese nicht auslesen.
 
@@ -169,7 +183,8 @@ Siehe [docs/PI-SETUP.md](docs/PI-SETUP.md). Die Dateien können auf dem Pi per `
 - v0.6: IP-SAN-HTTPS-Statusdienst, separate Geräteauthentifizierung, NTP-/CA-Prüfung – **auf Pi und ESP32 bestätigt**, einschließlich korrigierter Zahlenformatierung und Temperaturkurve
 - v0.7: FreeRTOS-Hintergrundtask, Snapshot-Mutex, Anzeigealter, stale-data-Sperre, Temperaturgrafik – **35 Tests, Pi-Build, Livebetrieb, kontrollierter TLS-Ausfall und Wiederherstellung auf ONX3248G035 bestätigt**
 - v0.7.1: SHA-256-Fingerabdruck für Connected-Build/Upload einschließlich `TelemetryWorker.h`, Healthcheck-Cache mit 45-s-Gültigkeitsdauer – **56/56 Tests, Connected-Build und frischer Cache über HTTPS am Pi bestätigt**; kein Flash erforderlich
-- v0.8 (Quellcode-Kandidat): Erweiterte SYSTEM-Diagnose mit Heap-Minimum, größtem freien internem Speicherblock und HTTPS-Task-Stackreserve; **Build und Hardwaretest noch offen**
-- Nächste Etappe: 64 Tests und inkrementellen v0.8-Connected-Build auf dem Pi prüfen, anschließend bewusstes Hardware-Abnahmeverfahren und 30-Minuten-Stabilitätstest. Chat bleibt gesperrt
+- v0.8: SYSTEM-Diagnose (Heap-Minimum, größter Block, HTTPS-Task-Stackreserve) – **64/64 Tests, Connected-Build und erste Hardwaremessungen bestätigt**, Graph mit 24/24 echten Pi-Temperaturwerten
+- Neue Entwicklung: strikt deaktivierte CHAT-Vorschau (Verlauf, Eingabefeld, SENDEN-Sperre) und rein lokale Qualitätsauswertung der Pi-HTTPS-Messreihe; **Tests/Build für diese Erweiterung stehen noch aus**. Chat bleibt gesperrt
+- Nächste Etappe: laufenden 30-Minuten-Test abschließen, Quality-Report auswerten, dann 83 Tests und neuen inkrementellen Build auf dem Pi prüfen
 
 Lizenz: noch festzulegen.
