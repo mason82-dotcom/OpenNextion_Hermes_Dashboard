@@ -8,6 +8,7 @@ export PATH="$HOME/.local/bin:$PATH"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SKETCH="$ROOT/firmware/HermesTouch"
 BUILD="$ROOT/build/firmware-connected"
+MANIFEST="$BUILD/.connected-sources.sha256"
 FQBN='esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB'
 
 if [[ $# -ne 1 ]]; then
@@ -29,12 +30,27 @@ for name in HermesTouch.ino.bin HermesTouch.ino.bootloader.bin HermesTouch.ino.p
   [[ -s "$BUILD/$name" ]] ||
     { printf 'REFUSED: missing connected firmware artifacts. Run firmware-build-connected.sh.\n' >&2; exit 3; }
 done
-for source in "$SKETCH/Config.h" "$SKETCH/LocalCa.h" "$SKETCH/HermesTouch.ino" "$SKETCH/BoardConfig.h"; do
-  if [[ "$source" -nt "$BUILD/HermesTouch.ino.bin" ]]; then
-    printf 'REFUSED: source/config newer than binary; rebuild connected firmware.\n' >&2
-    exit 3
-  fi
-done
+# Match exact contents of ALL local firmware translation units/headers,
+# including TelemetryWorker.h, private Config.h and LocalCa.h.
+# A build predating this manifest is refused until successfully recompiled.
+if [[ ! -s "$MANIFEST" ]]; then
+  printf 'REFUSED: no verified connected build fingerprint. Rebuild firmware.\n' >&2
+  exit 3
+fi
+BUILD_HASH="$(cat "$MANIFEST")"
+if [[ ! "$BUILD_HASH" =~ ^[a-f0-9]{64}$ ]]; then
+  printf 'REFUSED: invalid connected build fingerprint. Rebuild firmware.\n' >&2
+  exit 3
+fi
+CURRENT_HASH="$(python3 "$ROOT/scripts/pi/firmware-source-fingerprint.py")" || {
+  printf 'REFUSED: could not verify connected firmware sources.\n' >&2
+  exit 3
+}
+if [[ "$CURRENT_HASH" != "$BUILD_HASH" ]]; then
+  printf 'REFUSED: connected firmware sources changed since last successful build.\n' >&2
+  printf 'Rebuild with: bash scripts/pi/firmware-build-connected.sh\n' >&2
+  exit 3
+fi
 
 if ! command -v arduino-cli >/dev/null 2>&1; then
   printf 'Arduino CLI not installed.\n' >&2
