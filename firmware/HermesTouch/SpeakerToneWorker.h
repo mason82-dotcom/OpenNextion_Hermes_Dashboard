@@ -8,44 +8,59 @@
 #include <cstring>
 #include <math.h>
 #include "BoardConfig.h"
+#include "SpeakerPcmTest.h"
 
 static constexpr uint32_t SPK_SAMPLE_RATE = 16000;
 static constexpr uint32_t SPK_TONE_HZ = 660;
 static constexpr uint32_t SPK_TONE_MS = 250;
-static constexpr uint32_t SPK_AMPLITUDE = 2500; // <8% of signed 16-bit FS
+static constexpr uint32_t SPK_AMPLITUDE = 2500; // prior quiet hardware-tested cap
 static constexpr size_t SPK_CHUNK_SAMPLES = 256;
 static constexpr uint32_t SPK_AMP_WAIT_MS = 250;
 static constexpr uint32_t SPK_PLAY_DEADLINE_MS = 700;
 
 enum class SpeakerTonePhase : uint8_t {
-  STARTING, READY, QUEUED, WAIT_AMP, PLAYING, WAIT_MUTE, DONE, ERROR
+  STARTING, READY, QUEUED, WAIT_AMP, PLAYING, WAIT_MUTE, DONE, STOPPED, ERROR
 };
 
 struct SpeakerToneSnapshot {
   SpeakerTonePhase phase = SpeakerTonePhase::STARTING;
   uint32_t completed = 0;
+  uint8_t volumePct = 50;
 };
 
 static SemaphoreHandle_t speakerToneMutex = nullptr;
 static SpeakerToneSnapshot speakerToneShared;
 static std::atomic<bool> speakerTonePending{false};
 static std::atomic<bool> speakerToneAmpAck{false};
+static std::atomic<bool> speakerToneStop{false};
+static std::atomic<uint8_t> speakerToneVolume{50};
 
 // Only the main/LVGL task can request a tone.
-static bool speakerToneRequest() {
+static bool speakerToneRequest(int requestedVolume = 50) {
   if (speakerToneMutex == nullptr) return false;
   if (xSemaphoreTake(speakerToneMutex, 0) != pdTRUE) return false;
   const SpeakerTonePhase phase = speakerToneShared.phase;
-  if (phase != SpeakerTonePhase::READY && phase != SpeakerTonePhase::DONE) {
+  if (phase != SpeakerTonePhase::READY &&
+      phase != SpeakerTonePhase::DONE && phase != SpeakerTonePhase::STOPPED) {
     xSemaphoreGive(speakerToneMutex);
     return false;
   }
   // Reserve the state under the same mutex before signalling the worker,
   // so rapid double taps cannot queue a second tone while the first plays.
+  const uint8_t boundedVolume = speakerClampLevel(requestedVolume);
+  speakerToneShared.volumePct = boundedVolume;
+  speakerToneVolume.store(boundedVolume, std::memory_order_release);
+  speakerToneStop.store(false, std::memory_order_release);
   speakerToneShared.phase = SpeakerTonePhase::QUEUED;
   speakerTonePending.store(true, std::memory_order_release);
   xSemaphoreGive(speakerToneMutex);
   return true;
+}
+
+// Stop is an asynchronous request. The dedicated I2S worker ends the current
+// bounded chunk and GUI mutes the amp. No WiFi/agent/audio-input side effect.
+static void speakerToneRequestStop() {
+  speakerToneStop.store(true, std::memory_order_release);
 }
 
 static void speakerToneAmpAcknowledged(bool enabled) {
@@ -117,6 +132,7 @@ static void speakerToneTask(void *) {
     }
     // The PCF8574 expander is owned by the MAIN task exclusively. Worker
     // waits for main to enable the amplifier; no Wire calls from this task.
+    const uint8_t volume = speakerToneVolume.load(std::memory_order_acquire);
     speakerToneAmpAck.store(false, std::memory_order_release);
     speakerTonePublish(SpeakerTonePhase::WAIT_AMP, completed);
     uint32_t started = millis();
@@ -124,33 +140,36 @@ static void speakerToneTask(void *) {
            (uint32_t)(millis() - started) < SPK_AMP_WAIT_MS) {
       vTaskDelay(pdMS_TO_TICKS(5));
     }
-    if (!speakerToneAmpAck.load(std::memory_order_acquire)) {
-      speakerTonePublish(SpeakerTonePhase::ERROR, completed);
+    if (!speakerToneAmpAck.load(std::memory_order_acquire) ||
+        speakerToneStop.load(std::memory_order_acquire)) {
+      speakerTonePublish(SpeakerTonePhase::WAIT_MUTE, completed);
+      uint32_t waitMute = millis();
+      while (speakerToneAmpAck.load(std::memory_order_acquire) &&
+             (uint32_t)(millis() - waitMute) < SPK_AMP_WAIT_MS)
+        vTaskDelay(pdMS_TO_TICKS(5));
+      speakerTonePublish(SpeakerTonePhase::STOPPED, completed);
       continue;
     }
 
     speakerTonePublish(SpeakerTonePhase::PLAYING, completed);
-    const uint32_t totalSamples = SPK_SAMPLE_RATE * SPK_TONE_MS / 1000;
-    const uint32_t fadeSamples = SPK_SAMPLE_RATE / 100; // 10ms fade
+    const uint32_t totalSamples = SPK_TEST_TOTAL_SAMPLES;
+    const uint32_t fadeSamples = SPK_TEST_FADE_SAMPLES; // 10ms fade
     const uint32_t playbackStartMs = millis();
     uint32_t frame = 0;
     bool writeOk = true;
+    bool cancelled = false;
     while (frame < totalSamples) {
+      if (speakerToneStop.load(std::memory_order_acquire)) {
+        cancelled = true;
+        break;
+      }
       if ((uint32_t)(millis() - playbackStartMs) >= SPK_PLAY_DEADLINE_MS) {
         writeOk = false;
         break;
       }
-      const size_t count = min((size_t)(totalSamples - frame),
-                               SPK_CHUNK_SAMPLES);
-      for (size_t i = 0; i < count; ++i) {
-        const uint32_t n = frame + i;
-        const uint32_t left = totalSamples - 1 - n;
-        const uint32_t envelope = min(min(n, left), fadeSamples);
-        const float gain = (float)envelope / (float)fadeSamples;
-        const float angle = 6.2831853f * (float)SPK_TONE_HZ *
-                            (float)n / (float)SPK_SAMPLE_RATE;
-        pcm[i] = (int16_t)(SPK_AMPLITUDE * gain * sinf(angle));
-      }
+      const size_t count = speakerRenderLocalTestTone(
+          pcm, SPK_CHUNK_SAMPLES, frame, volume);
+      if (count == 0) { writeOk = false; break; }
       size_t bytesWritten = 0;
       const size_t required = count * sizeof(int16_t);
       if (i2s_channel_write(speakerTx, pcm, required, &bytesWritten, 100) !=
@@ -170,6 +189,8 @@ static void speakerToneTask(void *) {
     }
     if (speakerToneAmpAck.load(std::memory_order_acquire)) {
       speakerTonePublish(SpeakerTonePhase::ERROR, completed);
+    } else if (cancelled || speakerToneStop.load(std::memory_order_acquire)) {
+      speakerTonePublish(SpeakerTonePhase::STOPPED, completed);
     } else if (writeOk) {
       ++completed;
       speakerTonePublish(SpeakerTonePhase::DONE, completed);
