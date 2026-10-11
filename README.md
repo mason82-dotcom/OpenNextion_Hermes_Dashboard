@@ -2,7 +2,7 @@
 
 **Hermes Touch** – ESP32-S3 Touchscreen für den vorhandenen Hermes-Agent auf dem Raspberry Pi 5.
 
-**Stand: v0.7 – Live-Betrieb auf echter OpenNextion-Hardware bestätigt.** Der ESP32-S3 zeigt `TLS OK`, Hermes-API-/Dashboard-/Gateway-Status sowie aktuelle Pi-Temperatur, RAM, Load und eine korrekt beschriftete Live-Kurve. Die v0.7-Firmware wurde nach 35 erfolgreichen Tests auf dem Pi kompiliert und auf dem ONX3248G035 gestartet. **Kontrollierter HTTPS-Ausfall und Wiederherstellung auf Hardware bestätigt:** Fehlermeldung, Ausblenden veralteter Messwerte, automatische Wiederverbindung sowie laut Anwender weiterhin flüssige Touch-Bedienung. **Noch offen:** längerer Stabilitätstest und objektive Latenzmessung.
+**Aktueller Projektstand: v0.7.1 (Pi-Bridge und Build-/Upload-Sicherheit), ESP32-Firmware weiterhin v0.7.** Auf dem Raspberry Pi 5 wurden **56/56 Tests in 1,448 s erfolgreich ausgeführt** und der Connected-Build mit inkrementellem Arduino-Cache als `CONNECTED COMPILE OK` bestätigt; es wurde **nichts geflasht**. Die beiden v0.7.1-Korrekturen sind damit durch Tests und Build verifiziert. Nach Neustart der Bridge und des TLS-Dienstes wurden CA-/IP-geprüftes HTTPS, Hermes-API, Dashboard, Gateway und der **frische Healthcheck-Cache (`probe_fresh: True`, Alter 14,6 s)** im Livebetrieb bestätigt. Der Ablauf des 45-s-Cache-Zeitfensters ist durch Regressionstests abgesichert, aber noch **nicht gezielt am laufenden Pi durch einen simulierten Probe-Ausfall nachgewiesen**. Die v0.7-Firmware hat auf echter OpenNextion-Hardware Normalbetrieb, kontrollierten TLS-Ausfall und automatische Wiederherstellung bei flüssiger Touch-Bedienung bestanden. **Noch offen:** vollständiger 30-Minuten-Stabilitätstest, 45-s-Cache-Fehlerfall am laufenden Pi und objektive Touch-Latenzmessung.
 
 ## Architektur
 
@@ -118,7 +118,7 @@ bash scripts/pi/firmware-build-connected.sh
 
 ## v0.7.1: geprüfte Firmware-Eingaben und ablaufende Healthchecks
 
-**Zwei gezielte Korrekturen – Pi-Test steht noch aus.** Das manuelle Connected-Upload-Skript prüft jetzt einen in `build/firmware-connected/` gespeicherten SHA-256-Fingerabdruck aller relevanten lokalen Sketch-Dateien, einschließlich `TelemetryWorker.h` und privater Konfigurationsdateien. Veraltete Build-Artefakte werden verweigert, auch wenn Datei-Zeitstempel unverändert geblieben sind. Erst ein neuer erfolgreicher **inkrementeller** Connected-Build erzeugt die Freigabe.
+**Zwei gezielte Korrekturen – 56/56 Pi-Tests und inkrementeller Connected-Build erfolgreich (vom Anwender bestätigt).** Das manuelle Connected-Upload-Skript prüft jetzt einen in `build/firmware-connected/` gespeicherten SHA-256-Fingerabdruck aller relevanten lokalen Sketch-Dateien, einschließlich `TelemetryWorker.h` und privater Konfigurationsdateien. Veraltete Build-Artefakte werden verweigert, auch wenn Datei-Zeitstempel unverändert geblieben sind. Erst ein neuer erfolgreicher **inkrementeller** Connected-Build erzeugt die Freigabe.
 
 Die Pi-Bridge markiert gecachte Hermes-Healthchecks nach **45 Sekunden ohne vollständigen neuen Prüfzyklus** als veraltet; API-/Gateway-Status wird dann nicht als gesund bzw. aktiv ausgegeben. Die HTTPS-Smokediagnose zeigt das Alter des Healthcheck-Caches. Die ESP32-Firmware selbst wurde dafür **nicht** geändert.
 
@@ -152,6 +152,7 @@ Siehe [docs/PI-SETUP.md](docs/PI-SETUP.md). Die Dateien können auf dem Pi per `
 - v0.5: vier LVGL-Touchseiten, lokaler Messverlauf, Systemseite und gesperrter Chat-Platzhalter – **fotografisch auf dem ONX3248G035 bestätigt**, einschließlich der tatsächlichen Graph-Zählung
 - v0.6: IP-SAN-HTTPS-Statusdienst, separate Geräteauthentifizierung, NTP-/CA-Prüfung – **auf Pi und ESP32 bestätigt**, einschließlich korrigierter Zahlenformatierung und Temperaturkurve
 - v0.7: FreeRTOS-Hintergrundtask, Snapshot-Mutex, Anzeigealter, stale-data-Sperre, Temperaturgrafik – **35 Tests, Pi-Build, Livebetrieb, kontrollierter TLS-Ausfall und Wiederherstellung auf ONX3248G035 bestätigt**
-- Nächste Etappe: 30-Minuten-Langzeittest mit Pi-HTTPS-Messreihe (neues `stability-monitor.sh`) und ESP32-Speichervergleich auf dem SYSTEM-Reiter. Chat bleibt gesperrt
+- v0.7.1: SHA-256-Fingerabdruck für Connected-Build/Upload einschließlich `TelemetryWorker.h`, Healthcheck-Cache mit 45-s-Gültigkeitsdauer – **56/56 Tests, Connected-Build und frischer Cache über HTTPS am Pi bestätigt**; kein Flash erforderlich
+- Nächste Etappe: vollständiger 30-Minuten-Stabilitätstest mit Pi-HTTPS-Messreihe und ESP32-Speichervergleich; optional kontrollierter 45-s-Cache-Ausfalltest am Pi. Chat bleibt gesperrt
 
 Lizenz: noch festzulegen.
