@@ -43,6 +43,8 @@ class V08DiagnosticsTests(unittest.TestCase):
         self.assertIn("telemetryReadSnapshot(incoming)", FIRMWARE)
         self.assertIn("displayedWorkerStackFreeBytes = incoming.workerStackMinFreeBytes", FIRMWARE)
         self.assertIn("TLS-Stack min. frei: %lu B", FIRMWARE)
+        self.assertIn("displayedWorkerStackObserved = true;", FIRMWARE)
+        self.assertIn("if (displayedWorkerStackObserved)", FIRMWARE)
         self.assertNotIn("uxTaskGetStackHighWaterMark", FIRMWARE)
         self.assertNotIn("lv_", WORKER)
 
