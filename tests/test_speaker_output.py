@@ -11,12 +11,16 @@ ROOT = Path(__file__).resolve().parents[1]
 SKETCH = ROOT / "firmware/HermesTouch/HermesTouch.ino"
 FIRMWARE = SKETCH.read_text(encoding="utf-8")
 SPK = (SKETCH.parent / "SpeakerToneWorker.h").read_text(encoding="utf-8")
+PCM = (SKETCH.parent / "SpeakerPcmTest.h").read_text(encoding="utf-8")
 MIC = (SKETCH.parent / "MicLevelWorker.h").read_text(encoding="utf-8")
 BOARD = (SKETCH.parent / "BoardConfig.h").read_text(encoding="utf-8")
 CONFIG = (SKETCH.parent / "Config.h.example").read_text(encoding="utf-8")
 WORKER = (SKETCH.parent / "TelemetryWorker.h").read_text(encoding="utf-8")
 CHAT = FIRMWARE.split("static void buildChatPage(lv_obj_t *p) {", 1)[1].split(
-    "\nstatic void updateMicUi()", 1,
+    "\nstatic void buildVoicePage(", 1,
+)[0]
+VOICE = FIRMWARE.split("static void buildVoicePage(lv_obj_t *p) {", 1)[1].split(
+    "\n// Read aggregate audio level only;", 1,
 )[0]
 
 
@@ -85,8 +89,9 @@ class SpeakerOutputContracts(unittest.TestCase):
         self.assertIn("SPK_TONE_MS = 250", SPK)
         self.assertIn("SPK_AMPLITUDE = 2500", SPK)
         self.assertIn("SPK_TONE_HZ = 660", SPK)
-        self.assertIn("const uint32_t fadeSamples = SPK_SAMPLE_RATE / 100", SPK)
-        self.assertIn("sinf(angle)", SPK)
+        self.assertIn("const uint32_t fadeSamples = SPK_TEST_FADE_SAMPLES", SPK)
+        self.assertIn("sinf(angle)", PCM)
+        self.assertIn("speakerRenderLocalTestTone(", SPK)
         self.assertIn("memset(pcm, 0, sizeof(pcm))", SPK)
 
     def test_rapid_clicks_cannot_queue_a_second_tone(self):
@@ -96,20 +101,20 @@ class SpeakerOutputContracts(unittest.TestCase):
         self.assertIn("phase != SpeakerTonePhase::READY && phase != SpeakerTonePhase::DONE", SPK)
         self.assertIn("speakerTonePending.exchange(false, std::memory_order_acq_rel)", SPK)
 
-    def test_scrollable_ui_button_is_disabled_when_output_not_opted_in(self):
-        self.assertIn("chatSpeakerButton = lv_btn_create(chatHistory)", CHAT)
-        self.assertIn('"TESTTON"', CHAT)
-        self.assertIn("lv_obj_add_event_cb(chatSpeakerButton, onSpeakerTest, LV_EVENT_CLICKED", CHAT)
-        self.assertIn("lv_obj_add_state(chatSpeakerButton, LV_STATE_DISABLED)", CHAT)
-        button = CHAT.split("chatSpeakerButton = lv_btn_create(chatHistory)", 1)[1].split(
-            "lv_obj_t *speakerText =", 1,
+    def test_voice_button_is_disabled_when_output_not_opted_in(self):
+        self.assertIn("chatSpeakerButton = lv_btn_create(spk)", VOICE)
+        self.assertIn('"TON"', VOICE)
+        self.assertIn("lv_obj_add_event_cb(chatSpeakerButton, onSpeakerTest, LV_EVENT_CLICKED", VOICE)
+        self.assertIn("lv_obj_add_state(chatSpeakerButton, LV_STATE_DISABLED)", VOICE)
+        button = VOICE.split("chatSpeakerButton = lv_btn_create(spk)", 1)[1].split(
+            "lv_obj_t *spkText =", 1,
         )[0]
         enabled = button.split("#if HT_SPEAKER_TEST_ENABLED", 1)[1].split("#else", 1)[0]
         disabled = button.split("#else", 1)[1].split("#endif", 1)[0]
         self.assertIn("lv_obj_add_event_cb(chatSpeakerButton", enabled)
         self.assertNotIn("lv_obj_add_event_cb(chatSpeakerButton", disabled)
         self.assertIn("LV_STATE_DISABLED", disabled)
-        self.assertIn("lv_obj_set_scroll_dir(chatHistory, LV_DIR_VER)", CHAT)
+        self.assertNotIn("chatSpeakerButton", CHAT)
 
     def test_worker_has_no_recorder_network_or_agent_transport(self):
         for forbidden in ("WiFiClient", "HTTPClient", "http.POST(",
