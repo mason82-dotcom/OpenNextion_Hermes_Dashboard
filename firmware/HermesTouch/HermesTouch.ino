@@ -1,10 +1,11 @@
-/* Hermes Touch v0.7 - responsive LVGL display with TLS background telemetry.
+/* Hermes Touch v0.8 (candidate) - responsive LVGL telemetry and local memory diagnostics.
  * Hardware: OpenNextion ONX3248G035 / ESP32-S3.
  * Default build has no Config.h -> NO WIFI, NO DEVICE TOKEN, NO API ACCESS.
  * Status and history explicitly distinguish local ESP32 demo values from Pi data.
  * No chat actions, no OTA, no Hermes agent configuration writes.
  */
 #include <Arduino.h>
+#include <esp_heap_caps.h>
 #include <cmath>
 #include <stdio.h>
 #include <Wire.h>
@@ -77,7 +78,9 @@ static lv_obj_t *historyChart = nullptr;
 static lv_chart_series_t *historySeries = nullptr;
 static lv_obj_t *historyValue = nullptr;
 static lv_obj_t *systemHeap = nullptr;
+static lv_obj_t *systemLargestBlock = nullptr;
 static lv_obj_t *systemPsram = nullptr;
+static lv_obj_t *systemStack = nullptr;
 static lv_obj_t *systemUptime = nullptr;
 static lv_obj_t *systemTouches = nullptr;
 static uint32_t touchActions = 0;
@@ -90,6 +93,8 @@ static int activePage = 0;
 // GUI-owned cursor only. The network task never accesses UI or chart objects.
 static uint32_t lastChartSequence = 0;
 static bool telemetryStarted = false;
+// GUI copy of the worker-reported minimum stack headroom in bytes.
+static uint32_t displayedWorkerStackFreeBytes = 0;
 #endif
 
 static void panelReset() {
@@ -300,21 +305,24 @@ static void buildHistoryPage(lv_obj_t *p) {
 
 static void buildSystemPage(lv_obj_t *p) {
   label(p, "GERAET / HARDWARE", 13, 13, 290, CYAN);
-  lv_obj_t *hw = card(p, 10, 49, 300, 157);
+  lv_obj_t *hw = card(p, 10, 49, 300, 130);
   label(hw, "OpenNextion ONX3248G035", 11, 12, 278, FG);
   label(hw, "ESP32-S3  |  ST7796U  |  CST826", 11, 43, 278, MUTED);
   label(hw, "320 x 480  |  LVGL 8.3", 11, 75, 278, MUTED);
 #if HT_DEMO_MODE
-  label(hw, "Modus: OFFLINE (kein WLAN)", 11, 109, 278, GREEN);
+  label(hw, "Modus: OFFLINE (kein WLAN)", 11, 101, 278, GREEN);
 #else
-  label(hw, "Modus: VERBUNDEN (Test)", 11, 109, 278, GREEN);
+  label(hw, "Modus: VERBUNDEN (Test)", 11, 101, 278, GREEN);
 #endif
 
-  lv_obj_t *mem = card(p, 10, 217, 300, 125);
-  systemHeap = label(mem, "Heap frei: --", 11, 10, 278, FG);
-  systemPsram = label(mem, "PSRAM: --", 11, 38, 278, FG);
-  systemUptime = label(mem, "Laufzeit: --", 11, 66, 278, MUTED);
-  systemTouches = label(mem, "Touch-Aktionen: --", 11, 94, 278, MUTED);
+  // Six diagnostic rows fit without overlapping navigation (page ends at y=352).
+  lv_obj_t *mem = card(p, 10, 186, 300, 156);
+  systemHeap = label(mem, "Heap frei / Minimum: --", 11, 6, 278, FG);
+  systemLargestBlock = label(mem, "Groesster Heap-Block: --", 11, 29, 278, FG);
+  systemPsram = label(mem, "PSRAM: --", 11, 52, 278, FG);
+  systemStack = label(mem, "TLS-Task Stackreserve: --", 11, 75, 278, MUTED);
+  systemUptime = label(mem, "Laufzeit: --", 11, 98, 278, MUTED);
+  systemTouches = label(mem, "Touch-Aktionen: --", 11, 121, 278, MUTED);
 }
 
 static void buildChatPage(lv_obj_t *p) {
@@ -334,7 +342,7 @@ static void buildUi() {
   lv_obj_set_style_bg_color(screen, lv_color_hex(BG), 0);
   lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
   label(screen, "HERMES TOUCH", 13, 10, 200, CYAN);
-  label(screen, "v0.7  |  ONX3248G035", 13, 35, 280, MUTED);
+  label(screen, "v0.8  |  ONX3248G035", 13, 35, 280, MUTED);
 #if !HT_DEMO_MODE
   connectionLabel = label(screen, "WLAN --", 219, 12, 97, MUTED);
 #endif
@@ -363,11 +371,24 @@ static void buildUi() {
 
 static void updateLocalSystem() {
   if (systemHeap == nullptr) return;
-  lv_label_set_text_fmt(systemHeap, "Heap frei: %lu KB",
-                        (unsigned long)(ESP.getFreeHeap() / 1024));
+  lv_label_set_text_fmt(systemHeap, "Heap: %lu KB | Min: %lu KB",
+                        (unsigned long)(ESP.getFreeHeap() / 1024),
+                        (unsigned long)(ESP.getMinFreeHeap() / 1024));
+  lv_label_set_text_fmt(systemLargestBlock, "Groesster Block: %lu KB",
+                        (unsigned long)(heap_caps_get_largest_free_block(
+                            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024));
   lv_label_set_text_fmt(systemPsram, "PSRAM: %lu / %lu KB frei",
                         (unsigned long)(ESP.getFreePsram() / 1024),
                         (unsigned long)(ESP.getPsramSize() / 1024));
+#if HT_DEMO_MODE
+  lv_label_set_text(systemStack, "TLS-Task: OFFLINE");
+#else
+  if (displayedWorkerStackFreeBytes > 0)
+    lv_label_set_text_fmt(systemStack, "TLS-Stack min. frei: %lu B",
+                          (unsigned long)displayedWorkerStackFreeBytes);
+  else
+    lv_label_set_text(systemStack, "TLS-Stack min. frei: --");
+#endif
   lv_label_set_text_fmt(systemUptime, "Laufzeit: %lu Minuten",
                         (unsigned long)(millis() / 60000));
   lv_label_set_text_fmt(systemTouches, "Touch-Aktionen: %lu",
@@ -416,7 +437,11 @@ static void sampleStatus() {
   static TelemetrySnapshot latest;
   TelemetrySnapshot incoming;
   if (!telemetryStarted) latest.phase = TelemetryPhase::TASK_FAILED;
-  else if (telemetryReadSnapshot(incoming)) latest = incoming;
+  else if (telemetryReadSnapshot(incoming)) {
+    latest = incoming;
+    // Last seen worker stack watermark, independent of Pi/TLS availability.
+    displayedWorkerStackFreeBytes = incoming.workerStackMinFreeBytes;
+  }
   const uint32_t age = (uint32_t)(millis() - latest.lastSuccessMs);
   const bool fresh = latest.phase == TelemetryPhase::READY &&
                      latest.hasLastGood && age <= TELEMETRY_FRESH_MS;
@@ -534,7 +559,7 @@ void setup() {
   buildUi();
 
 #if HT_DEMO_MODE
-  Serial.println("HERMES TOUCH v0.7 OFFLINE: NO WIFI / NO API / READ-ONLY");
+  Serial.println("HERMES TOUCH v0.8 OFFLINE: NO WIFI / NO API / READ-ONLY");
 #else
   // Creates a separate FreeRTOS network worker; LVGL never waits for HTTPS.
   telemetryStarted = telemetryStart();
