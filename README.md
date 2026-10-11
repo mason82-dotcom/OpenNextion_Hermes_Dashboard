@@ -2,7 +2,7 @@
 
 **Hermes Touch** – ESP32-S3 Touchscreen für den vorhandenen Hermes-Agent auf dem Raspberry Pi 5.
 
-**Aktueller Projektstand: v0.8 läuft auf dem OpenNextion ONX3248G035; neue CHAT-Vorschau im GitHub-Quellstand noch nicht geflasht.** Der Anwender hat **64/64 Python-Tests (1,391 s)** und einen erfolgreichen **inkrementellen Connected-Firmware-Build** auf dem Raspberry Pi bestätigt und v0.8 anschließend auf Hardware gestartet. SYSTEM zeigt die zusätzlichen Heap-/Stack-Messungen; nach 13 Minuten Laufzeit wurden **172 KB freier Heap, 127 KB Minimum, 127 KB größter interner Block und 9.348 B TLS-Task-Stackreserve** gemessen. STATUS meldet `TLS OK`; GRAPH zeigte **52,9 °C bei 24/24 echten Messpunkten**. Der 30-Minuten-Pi-HTTPS-Stabilitätstest wurde gestartet; **die Abschlusszusammenfassung liegt hier noch nicht vor**. Neu im Repo: vorbereitete, weiterhin strikt **deaktivierte** CHAT-Eingabe und eine **offline** auswertbare Pi-Stabilitätsbewertung. Diese neuen Quellcode-Erweiterungen erfordern vor einem späteren optionalen Upload einen frischen Test-/Buildlauf. Hermes bleibt read-only, Chat-Versand gesperrt.
+**Aktueller Projektstand (11.10.2026):** **Hermes Touch v0.8.1 läuft auf dem OpenNextion ONX3248G035.** Auf dem Raspberry Pi wurden **94/94 Python-Tests** und ein erfolgreicher **Connected-Build** bestätigt; der PDM-Pegel des angeschlossenen Nextion Dual MIC Boards wurde am echten Display bei Sprache geprüft, **TLS OK** ist sichtbar. Der v0.8-Pi-HTTPS-Test lieferte **360/360 erfolgreiche Requests** und **WARN** wegen p95 = **358,7 ms** (Zielwert 250 ms); es gab keine Hermes-/Gateway-Ausfälle. **Neuer, noch ungeprüfter Quellcode-Kandidat: v0.8.2** mit lokalem Push-to-Talk-Test (maximal 4 Sekunden PCM im PSRAM, danach verworfen). Die vorhandene v0.8.1-Firmware wurde dadurch **nicht** verändert. **Erwartet: 106 Python-Tests und inkrementeller Connected-Build auf dem Pi, kein automatischer Flash.** Die CHAT-Eingabe, SENDEN und Hermes-Schreibzugriffe bleiben deaktiviert.
 
 ## Architektur
 
@@ -163,6 +163,14 @@ Das Nextion Dual MIC Board ist inzwischen physisch am ONX3248G035 angeschlossen.
 **Nächster Prüfschritt:** **94 Python-Tests erwartet** (83 bereits bestätigt, 2 neue UI-Tests, 9 Mikrofon-Tests) und inkrementeller Connected-Build. Keine laufenden Dienste ändern und nicht automatisch flashen.
 
 [**v0.8.1 PDM-Mikrofon: Sicherheit, Aktivierung und Testablauf**](docs/V0.8.1-MIC-VU.md)
+
+## v0.8.2 Quellcode-Kandidat – lokaler Push-to-Talk-Test mit OpenNextion-Referenz
+
+Die nächste Version greift die Hersteller-Interaktion aus **[OpenNextion `07_microphone_test`](https://github.com/OpenNextion/OpenNextion-SKU-ONX3248G035/tree/main/Example%20Programs/ESP-Arduino/07_microphone_test)** auf: MIC drücken, gedrückt halten, beim Loslassen/Touch-Verlust stoppen. Die verifizierten PDM-Pins **GPIO19/GPIO20**, **16 kHz**, **16-bit Mono**, **256-Sample-Chunks** und **PSRAM-Pufferung** stimmen mit der Arduino-Vorlage überein. Die Herstellerdemo verwendet 30 Sekunden mit Lautsprecherwiedergabe; Hermes Touch setzt aus Sicherheitsgründen eine **4-Sekunden-/128.000-Byte-Grenze**, verwirft PCM beim Stoppen und schaltet **keinen** Audio-Transport oder Hermes-Chat frei. Der bereits auf Hardware funktionierende ESP_I2S-Treiber bleibt erhalten; auf die unbenötigte NS4168-Lautsprechersteuerung wird verzichtet.
+
+**v0.8.2 wurde noch nicht auf dem Pi kompiliert oder auf Hardware getestet.** Die bestehende v0.8.1 läuft weiter. **106 Python-Tests erwartet** (94 bestätigte + 12 neue PTT-Tests) und Connected-Build; kein automatischer Flash.
+
+[**PTT-Konzept, Hardwareprüfung und Sicherheitsgrenzen**](docs/V0.8.2-LOCAL-PTT.md)
 
 ## 30-Minuten-Stabilitätstest für v0.8 (kein Flashen)
 
