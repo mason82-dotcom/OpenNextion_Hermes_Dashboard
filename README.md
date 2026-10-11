@@ -124,6 +124,22 @@ Die Pi-Bridge markiert gecachte Hermes-Healthchecks nach **45 Sekunden ohne voll
 
 [**Korrekturen, Tests und sichere Aktivierung auf dem Pi**](docs/V0.7.1-FIXES.md)
 
+## In Entwicklung: Hermes Touch v0.8 – ESP32-Diagnose
+
+Die neue **v0.8-Firmware ist Quellcode-Kandidat, noch nicht auf dem Pi kompiliert oder auf dem OpenNextion geflasht**. Auf der SYSTEM-Seite stehen künftig zusätzlich der kleinste seit Boot beobachtete freie Heap, der größte zusammenhängende interne Heapblock und die im HTTPS-FreeRTOS-Task ermittelte minimale Stackreserve in Bytes. Laufzeit, PSRAM und Touch-Aktionen bleiben sichtbar. Die Status-/Graph-/Chat-Seiten und alle bisherigen read-only TLS-Sicherheitsgrenzen bleiben unverändert.
+
+**Nächster Prüfschritt:** auf dem Pi **64 erwartete Tests** (56 bisherige plus 8 neue Quellcode-Regressionstests) ausführen und den **inkrementellen** Connected-Build überprüfen. Ein Update auf dem Gerät erfolgt weiterhin nur nach separater manueller Flash-Bestätigung.
+
+[**v0.8 – Diagnosefunktionen, Tests und Hardware-Abnahme**](docs/V0.8-DIAGNOSTICS.md)
+
+```bash
+cd ~/Projekte/OpenNextion_Hermes_Dashboard
+git pull --ff-only
+python3 -m unittest discover -s tests -v
+bash scripts/pi/firmware-build-connected.sh
+# NICHT AUTOMATISCH FLASHEN
+```
+
 ## 30-Minuten-Stabilitätstest für v0.7 (kein Flashen)
 
 Nach dem bestätigten TLS-Ausfall- und Wiederherstellungstest kann die Pi-Seite mit einem **lokalen, lesenden HTTPS-Monitor** über 30 Minuten geprüft werden. Das Tool zeichnet Antwortzeiten, Ausfälle und ausgewählte Pi-Messwerte im ignorierten `build/stability/`-Verzeichnis auf. Ergänzend müssen die ESP32-Heap- und PSRAM-Werte am Anfang und am Ende direkt auf der SYSTEM-Seite verglichen werden – der Pi-Monitor kann diese nicht auslesen.
@@ -153,6 +169,7 @@ Siehe [docs/PI-SETUP.md](docs/PI-SETUP.md). Die Dateien können auf dem Pi per `
 - v0.6: IP-SAN-HTTPS-Statusdienst, separate Geräteauthentifizierung, NTP-/CA-Prüfung – **auf Pi und ESP32 bestätigt**, einschließlich korrigierter Zahlenformatierung und Temperaturkurve
 - v0.7: FreeRTOS-Hintergrundtask, Snapshot-Mutex, Anzeigealter, stale-data-Sperre, Temperaturgrafik – **35 Tests, Pi-Build, Livebetrieb, kontrollierter TLS-Ausfall und Wiederherstellung auf ONX3248G035 bestätigt**
 - v0.7.1: SHA-256-Fingerabdruck für Connected-Build/Upload einschließlich `TelemetryWorker.h`, Healthcheck-Cache mit 45-s-Gültigkeitsdauer – **56/56 Tests, Connected-Build und frischer Cache über HTTPS am Pi bestätigt**; kein Flash erforderlich
-- Nächste Etappe: vollständiger 30-Minuten-Stabilitätstest mit Pi-HTTPS-Messreihe und ESP32-Speichervergleich; optional kontrollierter 45-s-Cache-Ausfalltest am Pi. Chat bleibt gesperrt
+- v0.8 (Quellcode-Kandidat): Erweiterte SYSTEM-Diagnose mit Heap-Minimum, größtem freien internem Speicherblock und HTTPS-Task-Stackreserve; **Build und Hardwaretest noch offen**
+- Nächste Etappe: 64 Tests und inkrementellen v0.8-Connected-Build auf dem Pi prüfen, anschließend bewusstes Hardware-Abnahmeverfahren und 30-Minuten-Stabilitätstest. Chat bleibt gesperrt
 
 Lizenz: noch festzulegen.
