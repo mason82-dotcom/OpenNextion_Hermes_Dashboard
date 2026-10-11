@@ -98,7 +98,8 @@ class SpeakerOutputContracts(unittest.TestCase):
         self.assertIn("speakerToneShared.phase = SpeakerTonePhase::QUEUED", SPK)
         self.assertIn("speakerTonePending.store(true, std::memory_order_release)", SPK)
         self.assertIn("xSemaphoreTake(speakerToneMutex, 0)", SPK)
-        self.assertIn("phase != SpeakerTonePhase::READY && phase != SpeakerTonePhase::DONE", SPK)
+        self.assertIn("phase != SpeakerTonePhase::READY &&", SPK)
+        self.assertIn("phase != SpeakerTonePhase::DONE && phase != SpeakerTonePhase::STOPPED", SPK)
         self.assertIn("speakerTonePending.exchange(false, std::memory_order_acq_rel)", SPK)
 
     def test_voice_button_is_disabled_when_output_not_opted_in(self):
