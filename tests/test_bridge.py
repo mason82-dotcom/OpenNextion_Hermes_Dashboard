@@ -124,6 +124,79 @@ class TestBridge(unittest.TestCase):
         self.assertFalse(data["dashboard_status_available"])
         self.assertEqual(data["dashboard_reason"], "invalid_json")
 
+    def test_health_cache_is_fresh_only_within_45_seconds(self):
+        cached = {
+            **module._probe_data, "api_reachable": True, "api_healthy": True,
+            "dashboard_reachable": True, "dashboard_status_available": True,
+            "dashboard_reason": "ok", "gateway_running": True,
+        }
+        with patch.object(module, "_probe_data", cached), \
+             patch.object(module, "_last_probe_monotonic", 100.0), \
+             patch.object(module, "_last_probe_success", 1234567890):
+            fresh = module.health_snapshot(now_monotonic=144.9)
+            self.assertTrue(fresh["probe_fresh"])
+            self.assertTrue(fresh["api_healthy"])
+            self.assertTrue(fresh["gateway_running"])
+            self.assertAlmostEqual(fresh["probe_age_s"], 44.9)
+            self.assertEqual(fresh["last_probe_success"], 1234567890)
+
+            expired = module.health_snapshot(now_monotonic=145.1)
+            self.assertFalse(expired["probe_fresh"])
+            self.assertFalse(expired["api_healthy"])
+            self.assertFalse(expired["dashboard_status_available"])
+            self.assertIsNone(expired["gateway_running"])
+            self.assertEqual(expired["dashboard_reason"], "stale_cache")
+            self.assertEqual(expired["last_probe_success"], 1234567890)
+
+    def test_pending_health_cache_never_reports_healthy(self):
+        cached = {**module._probe_data,
+                  "api_healthy": True, "gateway_running": True,
+                  "dashboard_status_available": True}
+        with patch.object(module, "_probe_data", cached), \
+             patch.object(module, "_last_probe_monotonic", None), \
+             patch.object(module, "_last_probe_success", None):
+            result = module.health_snapshot(now_monotonic=100)
+            self.assertFalse(result["probe_fresh"])
+            self.assertIsNone(result["probe_age_s"])
+            self.assertIsNone(result["last_probe_success"])
+            self.assertFalse(result["api_healthy"])
+            self.assertIsNone(result["gateway_running"])
+            self.assertEqual(result["dashboard_reason"], "pending")
+
+    def test_completed_probe_cycle_publishes_timestamp_and_fresh_health(self):
+        dashboard = {
+            "dashboard_reachable": True, "dashboard_status_available": True,
+            "dashboard_reason": "ok", "gateway_running": True,
+        }
+        api = {"api_reachable": True, "api_healthy": True}
+        with patch.object(module, "_probe_data", dict(module._probe_data)), \
+             patch.object(module, "_last_probe_monotonic", None), \
+             patch.object(module, "_last_probe_success", None), \
+             patch.object(module, "dashboard_probe", return_value=dashboard), \
+             patch.object(module, "api_health_probe", return_value=api):
+            module.probe_cycle()
+            snapshot = module.health_snapshot()
+            self.assertTrue(snapshot["probe_fresh"])
+            self.assertTrue(snapshot["api_healthy"])
+            self.assertTrue(snapshot["gateway_running"])
+            self.assertLess(snapshot["probe_age_s"], 1)
+            self.assertIsInstance(snapshot["last_probe_success"], int)
+
+    def test_failed_probe_cycle_cannot_refresh_stale_health(self):
+        cached = {**module._probe_data,
+                  "api_healthy": True, "gateway_running": True}
+        with patch.object(module, "_probe_data", cached), \
+             patch.object(module, "_last_probe_monotonic", 100.0), \
+             patch.object(module, "_last_probe_success", 1234567890), \
+             patch.object(module, "dashboard_probe", side_effect=RuntimeError("probe crash")):
+            with self.assertRaises(RuntimeError):
+                module.probe_cycle()
+            snapshot = module.health_snapshot(now_monotonic=146.0)
+            self.assertFalse(snapshot["probe_fresh"])
+            self.assertFalse(snapshot["api_healthy"])
+            self.assertIsNone(snapshot["gateway_running"])
+            self.assertEqual(snapshot["probe_age_s"], 46.0)
+
     def test_requests_never_call_upstream(self):
         with patch.object(module, "dashboard_probe",
                           side_effect=AssertionError("blocking upstream")), \
