@@ -14,8 +14,8 @@ WORKER = (ROOT / "firmware/HermesTouch/TelemetryWorker.h").read_text(encoding="u
 
 class V08DiagnosticsTests(unittest.TestCase):
     def test_version_bumped_only_in_candidate_firmware(self):
-        self.assertIn('label(screen, "v0.8.3 | ONX3248G035"', FIRMWARE)
-        self.assertIn("Hermes Touch v0.8.3 (candidate)", FIRMWARE)
+        self.assertIn('label(screen, "v0.8.4 | 480x320"', FIRMWARE)
+        self.assertIn("Hermes Touch v0.8.4 (candidate)", FIRMWARE)
 
     def test_heap_minimum_is_real_esp32_measurement(self):
         self.assertIn("ESP.getFreeHeap()", FIRMWARE)
@@ -48,16 +48,16 @@ class V08DiagnosticsTests(unittest.TestCase):
         self.assertNotIn("uxTaskGetStackHighWaterMark", FIRMWARE)
         self.assertNotIn("lv_", WORKER)
 
-    def test_system_labels_fit_in_page_before_navigation(self):
-        self.assertIn("card(p, 10, 186, 300, 156)", FIRMWARE)
-        self.assertIn("card(p, 10, 49, 300, 130)", FIRMWARE)
-        sections = FIRMWARE.split("static void buildSystemPage(lv_obj_t *p) {", 1)
-        self.assertEqual(len(sections), 2)
-        system = sections[1].split("\nstatic void buildChatPage(", 1)[0]
-        offsets = re.findall(r"label\(mem, \"[^\"]+\", 11, (\d+), 278,", system)
-        self.assertEqual([int(y) for y in offsets], [6, 29, 52, 75, 98, 121])
-        self.assertLess(186 + 156, 352 + 1)
-        self.assertLess(49 + 130, 186)
+    def test_system_labels_fit_landscape_page(self):
+        self.assertIn("card(p, 10, 34, 220, 190)", FIRMWARE)
+        self.assertIn("card(p, 240, 34, 230, 190)", FIRMWARE)
+        system = FIRMWARE.split("static void buildSystemPage(lv_obj_t *p) {", 1)[1].split(
+            "\n// CHAT is a read-only text-chat shell;", 1,
+        )[0]
+        offsets = re.findall(r'label\(mem, "[^"]+", 8, (\d+), 216,', system)
+        self.assertEqual([int(y) for y in offsets], [5, 34, 63, 92, 121, 150])
+        self.assertLessEqual(240 + 230, 480)
+        self.assertLessEqual(34 + 190, 240)
 
     def test_offline_mode_does_not_require_network_task(self):
         self.assertIn('#if !HT_DEMO_MODE\n#include "TelemetryWorker.h"', FIRMWARE)
