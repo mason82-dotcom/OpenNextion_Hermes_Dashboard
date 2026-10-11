@@ -504,7 +504,7 @@ static void buildChatPage(lv_obj_t *p) {
 // No PTT samples go to the speaker, Hermes agent, TLS bridge or filesystem.
 static void buildVoicePage(lv_obj_t *p) {
   label(p, "SPRACHE / AUDIO", 13, 4, 430, CYAN);
-  label(p, "Nur lokaler Hardwaretest - keine Agent-Befehle", 13, 27, 445, MUTED);
+  label(p, "SPRACHCHAT GESPERRT - nur lokaler Audiotest", 13, 27, 445, MUTED);
   chatPttButton = lv_btn_create(p);
   lv_obj_set_pos(chatPttButton, 10, 49);
   lv_obj_set_size(chatPttButton, 190, 39);
