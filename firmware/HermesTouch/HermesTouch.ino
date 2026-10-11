@@ -224,7 +224,7 @@ static void touchRead(lv_indev_drv_t *, lv_indev_data_t *data) {
         point.x, point.y, touchCalibProfile, LCD_H_RES, LCD_V_RES);
     const uint32_t nowMs = millis();
     if (!wasTouching || (uint32_t)(nowMs - lastLogMs) >= 300) {
-      Serial.printf("TOUCH_RAW x=%d y=%d -> LVGL x=%d y=%d profile=%u\\r\\n",
+      Serial.printf("TOUCH_RAW x=%d y=%d -> LVGL x=%d y=%d profile=%u\r\n",
                     (int)point.x, (int)point.y,
                     (int)rotated.x, (int)rotated.y,
                     (unsigned)touchCalibProfile);
@@ -795,7 +795,7 @@ static void touchCalibHandleUsb() {
       if (touchCalibLabel != nullptr)
         lv_label_set_text_fmt(touchCalibLabel, "TOUCH: PROFIL %u",
                               (unsigned)touchCalibProfile);
-      Serial.printf("TOUCH_PROFILE=%u (temporary; T0..T7)\\r\\n",
+      Serial.printf("TOUCH_PROFILE=%u (temporary; T0..T7)\r\n",
                     (unsigned)touchCalibProfile);
     }
     touchCalibCommandOpen = (byte == 'T');
