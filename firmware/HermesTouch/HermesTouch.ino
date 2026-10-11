@@ -17,6 +17,14 @@
 #include <lvgl.h>
 #include "BoardConfig.h"
 #include "LandscapeTouch.h"
+// Opt-in USB-only touch calibration. Never compiled into normal firmware
+// unless enabled in the locally private Config.h for a diagnostic build.
+#ifndef HT_TOUCH_CALIBRATION_ENABLED
+#define HT_TOUCH_CALIBRATION_ENABLED 0
+#endif
+#if HT_TOUCH_CALIBRATION_ENABLED != 0 && HT_TOUCH_CALIBRATION_ENABLED != 1
+#error "HT_TOUCH_CALIBRATION_ENABLED must be 0 or 1"
+#endif
 
 #if __has_include("Config.h")
 #include "Config.h"
@@ -141,6 +149,11 @@ static uint8_t historySampleCount = 0;
 static uint32_t lastSampleMs = 0;
 static bool requestSample = false;
 static int activePage = 0;
+#if HT_TOUCH_CALIBRATION_ENABLED
+static uint8_t touchCalibProfile = 0; // original v0.8.4 mapping
+static lv_obj_t *touchCalibLabel = nullptr;
+static bool touchCalibCommandOpen = false;
+#endif
 
 #if !HT_DEMO_MODE
 // GUI-owned cursor only. The network task never accesses UI or chart objects.
@@ -202,12 +215,40 @@ static void touchRead(lv_indev_drv_t *, lv_indev_data_t *data) {
     CST_TS_Point point = touch.getPoint();
     // CST826 reports native portrait axes, independent of LCD rotation.
     // gfx->setRotation(1) rotates the image clockwise. Match the touch axes.
+    // Diagnostic mode supports runtime profiles, because CST826's actual
+    // raw axis order on this board has not been established empirically.
+#if HT_TOUCH_CALIBRATION_ENABLED
+    const LandscapeTouchPoint rotated = mapTouchWithProfile(
+        point.x, point.y, touchCalibProfile, LCD_H_RES, LCD_V_RES);
+    static uint32_t lastLogMs = 0;
+    static bool wasTouching = false;
+    const uint32_t nowMs = millis();
+    if (!wasTouching || (uint32_t)(nowMs - lastLogMs) >= 300) {
+      Serial.printf("TOUCH_RAW x=%d y=%d -> LVGL x=%d y=%d profile=%u\\r\\n",
+                    (int)point.x, (int)point.y,
+                    (int)rotated.x, (int)rotated.y,
+                    (unsigned)touchCalibProfile);
+      lastLogMs = nowMs;
+    }
+    wasTouching = true;
+#else
     const LandscapeTouchPoint rotated = mapNativeTouchToLandscape(
         point.x, point.y, LCD_H_RES, LCD_V_RES);
+#endif
     x = constrain(rotated.x, 0, (int16_t)gfx->width() - 1);
     y = constrain(rotated.y, 0, (int16_t)gfx->height() - 1);
     data->state = LV_INDEV_STATE_PR;
   } else {
+#if HT_TOUCH_CALIBRATION_ENABLED
+    // Per-contact logs are the only touched data exposed on USB Serial;
+    // never exported through telemetry, filesystem, network or MQTT.
+    // Track release separately from mode changes.
+    static uint32_t lastReleaseLogMs = 0;
+    const uint32_t nowMs = millis();
+    if ((uint32_t)(nowMs - lastReleaseLogMs) >= 1000) {
+      lastReleaseLogMs = nowMs;
+    }
+#endif
     data->state = LV_INDEV_STATE_REL;
   }
   data->point.x = x;
@@ -748,6 +789,26 @@ static void updateSpeakerUi() {
 #endif
 }
 
+#if HT_TOUCH_CALIBRATION_ENABLED
+// Only a locally attached USB terminal can change this volatile profile.
+// Commands: T0...T7. No persistent write, no agent/API/audio side effects.
+static void touchCalibHandleUsb() {
+  while (Serial.available() > 0) {
+    const int byte = Serial.read();
+    if (byte < 0) break;
+    if (touchCalibCommandOpen && byte >= '0' && byte <= '7') {
+      touchCalibProfile = static_cast<uint8_t>(byte - '0');
+      if (touchCalibLabel != nullptr)
+        lv_label_set_text_fmt(touchCalibLabel, "TOUCH: PROFIL %u",
+                              (unsigned)touchCalibProfile);
+      Serial.printf("TOUCH_PROFILE=%u (temporary; T0..T7)\\r\\n",
+                    (unsigned)touchCalibProfile);
+    }
+    touchCalibCommandOpen = (byte == 'T');
+  }
+}
+#endif
+
 static void buildUi() {
   lv_obj_t *screen = lv_scr_act();
   lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
@@ -755,6 +816,9 @@ static void buildUi() {
   lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
   label(screen, "HERMES TOUCH", 10, 3, 195, CYAN);
   label(screen, "v0.8.4 | 480x320", 210, 7, 155, MUTED);
+#if HT_TOUCH_CALIBRATION_ENABLED
+  touchCalibLabel = label(screen, "TOUCH: PROFIL 0", 250, 23, 215, CYAN);
+#endif
 #if !HT_DEMO_MODE
   connectionLabel = label(screen, "WLAN --", 376, 7, 98, MUTED);
 #endif
@@ -945,6 +1009,10 @@ static void sampleStatus() {
 
 void setup() {
   Serial.begin(115200);
+#if HT_TOUCH_CALIBRATION_ENABLED
+  Serial.println("TOUCH CALIBRATION (USB LOCAL ONLY): send T0..T7");
+  Serial.println("Tap left/right nav and report TOUCH_RAW lines.");
+#endif
   Wire.begin(NEXTION_IIC_SDA_PIN, NEXTION_IIC_SCL_PIN, 400000);
   panelReset();
   gfx->begin(LCD_SPI_FREQ);
@@ -1003,6 +1071,9 @@ void loop() {
   lv_tick_inc(now - lastTick);
   lastTick = now;
   lv_timer_handler();
+#if HT_TOUCH_CALIBRATION_ENABLED
+  touchCalibHandleUsb(); // local calibration; no persistent settings
+#endif
 #if HT_MIC_TEST_ENABLED
   static uint32_t lastMicUiMs = 0;
   if ((uint32_t)(now - lastMicUiMs) >= 100) {
