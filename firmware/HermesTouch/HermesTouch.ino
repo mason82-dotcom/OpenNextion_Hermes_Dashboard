@@ -1,4 +1,4 @@
-/* Hermes Touch v0.8 (candidate) - responsive LVGL telemetry and local memory diagnostics.
+/* Hermes Touch v0.8.1 (candidate) - read-only PDM microphone level test.
  * Hardware: OpenNextion ONX3248G035 / ESP32-S3.
  * Default build has no Config.h -> NO WIFI, NO DEVICE TOKEN, NO API ACCESS.
  * Status and history explicitly distinguish local ESP32 demo values from Pi data.
@@ -431,7 +431,7 @@ static void buildUi() {
   lv_obj_set_style_bg_color(screen, lv_color_hex(BG), 0);
   lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
   label(screen, "HERMES TOUCH", 13, 10, 200, CYAN);
-  label(screen, "v0.8  |  ONX3248G035", 13, 35, 280, MUTED);
+  label(screen, "v0.8.1 | ONX3248G035", 13, 35, 280, MUTED);
 #if !HT_DEMO_MODE
   connectionLabel = label(screen, "WLAN --", 219, 12, 97, MUTED);
 #endif
@@ -649,7 +649,7 @@ void setup() {
   buildUi();
 
 #if HT_DEMO_MODE
-  Serial.println("HERMES TOUCH v0.8 OFFLINE: NO WIFI / NO API / READ-ONLY");
+  Serial.println("HERMES TOUCH v0.8.1 OFFLINE: NO WIFI / NO API / READ-ONLY");
 #else
   // Creates a separate FreeRTOS network worker; LVGL never waits for HTTPS.
   telemetryStarted = telemetryStart();
