@@ -17,3 +17,9 @@ static constexpr int8_t MIC_PDM_DATA_PIN = 20;
 static constexpr uint8_t CST826_ADDR = 0x15;
 static constexpr uint8_t PCF8574_ADDR = 0x38;
 static constexpr uint8_t PCF8574_PIN_LCD_RST = 6;
+// Official OpenNextion Arduino 07_microphone_test: NS4168 I2S speaker.
+// Audio output is *separately opt-in*; PCF8574 P0 controls amplifier enable.
+static constexpr uint8_t PCF8574_PIN_I2S_CTRL = 0;
+static constexpr int8_t SPEAKER_BCLK_PIN = 14;
+static constexpr int8_t SPEAKER_DATA_PIN = 15;
+static constexpr int8_t SPEAKER_WS_PIN = 16;
