@@ -89,6 +89,7 @@ static bool expanderAvailable = false;
 static uint8_t expanderShadow = 0xFF;
 #if HT_SPEAKER_TEST_ENABLED
 static bool speakerAmpOn = false;
+static bool speakerToneStartAttempted = false;
 #endif
 static lv_disp_draw_buf_t drawBuf;
 static lv_disp_drv_t dispDrv;
@@ -909,8 +910,9 @@ void setup() {
   if (!micLevelStart())
     Serial.println("WARN: local microphone level worker could not start");
 #endif
-#if HT_SPEAKER_TEST_ENABLED
-  // Separate I2S1 speaker output task. No amplifier when expander is missing.
+#if HT_SPEAKER_TEST_ENABLED && !HT_MIC_TEST_ENABLED
+  // With no mic enabled, I2S1 can initialize immediately.
+  speakerToneStartAttempted = true;
   if (expanderAvailable && !speakerToneStart())
     Serial.println("WARN: local speaker tone worker could not start");
 #endif
@@ -932,6 +934,20 @@ void loop() {
   }
 #endif
 #if HT_SPEAKER_TEST_ENABLED
+#if HT_MIC_TEST_ENABLED
+  // Arduino ESP_I2S uses I2S_NUM_AUTO. Wait until PDM RX has successfully
+  // allocated its channel before reserving manufacturer's I2S1 for output.
+  // Prevents a startup race and keeps the verified microphone operational.
+  if (!speakerToneStartAttempted && expanderAvailable) {
+    MicLevelSnapshot micForSpeaker;
+    if (micLevelRead(micForSpeaker) &&
+        (micForSpeaker.ready || micForSpeaker.failed)) {
+      speakerToneStartAttempted = true;
+      if (!speakerToneStart())
+        Serial.println("WARN: local speaker tone worker could not start");
+    }
+  }
+#endif
   static uint32_t lastSpeakerUiMs = 0;
   if ((uint32_t)(now - lastSpeakerUiMs) >= 20) {
     lastSpeakerUiMs = now;
