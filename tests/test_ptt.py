@@ -24,7 +24,9 @@ class TestLocalOnlyPushToTalk(unittest.TestCase):
 
     def test_ptt_control_requires_explicit_microphone_opt_in(self):
         self.assertIn("chatPttButton = lv_btn_create(p)", CHAT)
-        self.assertIn("lv_obj_add_event_cb(chatPttButton, onPttTouch, LV_EVENT_ALL", CHAT)
+        for event in ("LV_EVENT_PRESSED", "LV_EVENT_RELEASED", "LV_EVENT_PRESS_LOST"):
+            self.assertIn("lv_obj_add_event_cb(chatPttButton, onPttTouch, " + event, CHAT)
+        self.assertNotIn("lv_obj_add_event_cb(chatPttButton, onPttTouch, LV_EVENT_ALL", CHAT)
         self.assertIn("lv_obj_add_state(chatPttButton, LV_STATE_DISABLED)", CHAT)
         self.assertIn('"HALTEN: TEST"', CHAT)
         self.assertIn('"PTT: AUS"', CHAT)
