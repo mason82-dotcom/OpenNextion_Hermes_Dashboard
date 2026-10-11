@@ -18,7 +18,7 @@ CHAT = FIRMWARE.split("static void buildChatPage(lv_obj_t *p) {", 1)[1].split(
 
 class TestLocalOnlyPushToTalk(unittest.TestCase):
     def test_version_and_default_mic_off(self):
-        self.assertIn('label(screen, "v0.8.2 | ONX3248G035"', FIRMWARE)
+        self.assertIn('label(screen, "v0.8.3 | ONX3248G035"', FIRMWARE)
         self.assertIn("#ifndef HT_MIC_TEST_ENABLED\n#define HT_MIC_TEST_ENABLED 0", FIRMWARE)
         self.assertIn('#if HT_MIC_TEST_ENABLED\n#include "MicLevelWorker.h"', FIRMWARE)
 
