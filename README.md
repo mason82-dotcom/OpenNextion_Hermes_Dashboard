@@ -185,7 +185,7 @@ Die damalige Hochkantbedienung und die Audiofelder innerhalb von CHAT gehören z
 
 Die mit v0.8.3 hardwarebestätigten PDM-Mikrofon- und NS4168-Lautsprecherwege bleiben erhalten; ihre lokale Bedienung wurde auf die neue fünfte Registerkarte **SPRACHE** verschoben. Der separate **CHAT-Tab** zeigt weiterhin nur einen **gesperrten Textchat**. Neu sind **480x320 Landscape**, eine auf 90° transformierte CST826-Toucheingabe, 0–100% begrenzte **Testton-Pegelwahl** (100% = höchstens die zuvor bereits geprüfte leise Amplitude), **STOP** und der weiterhin zeitlich begrenzte viersekündige PTT-Test. Keine Hermes-Audiofunktion, kein TTS, kein Audio über die Bridge und keine Agent-Befehle.
 
-**v0.8.4 noch nicht auf dem Pi oder Display bestätigt.** Im Repo liegen **11 zusätzliche Tests** (insgesamt **141 erwartet**) einschließlich eines ausführbaren C++-Hosttests für Touch-Ecken und PCM-Aussteuerungsgrenzen. Der bereits erfolgreiche v0.8.3-Build darf nicht als v0.8.4-Build wiederverwendet werden.
+**Hardwarebefund v0.8.4 (11.10.2026):** 141/141 Pi-Tests und Connected-Build erfolgreich, TLS-Smoke erfolgreich. Nach manuellem Flash wurde jedoch eine **diagonal versetzte CST826-Toucheingabe** gemeldet. Die bisherige Landscape-Abbildung ist deshalb **nicht hardwarebestätigt**. Der nachfolgende Diagnosepatch bietet mit explizit aktivierter privater Option `HT_TOUCH_CALIBRATION_ENABLED 1` eine **USB-only Rohkoordinaten-Ausgabe und volatile T0..T7-Profilwahl**; **146 Tests erwartet**, Pi-Build für diesen neuen Patch noch ausstehend. Bis zum Ergebnis keine weiteren blinden Rotations-/Pinänderungen vornehmen. [Kalibrier-Anleitung](docs/V0.8.4-TOUCH-CALIBRATION.md).
 
 [**v0.8.4 Landscape-/Sprach-Tab-Anleitung und Prüfplan**](docs/V0.8.4-LANDSCAPE-VOICE.md)
 
