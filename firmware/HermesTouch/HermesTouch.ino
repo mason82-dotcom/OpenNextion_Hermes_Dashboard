@@ -25,6 +25,17 @@
 #ifndef HT_DEMO_MODE
 #define HT_DEMO_MODE 0
 #endif
+// Microphone capture is a separate, explicitly opt-in LOCAL test.
+// Without an explicit private Config.h switch, no mic driver is initialized.
+#ifndef HT_MIC_TEST_ENABLED
+#define HT_MIC_TEST_ENABLED 0
+#endif
+#if HT_MIC_TEST_ENABLED != 0 && HT_MIC_TEST_ENABLED != 1
+#error "HT_MIC_TEST_ENABLED must be 0 or 1"
+#endif
+#if HT_MIC_TEST_ENABLED
+#include "MicLevelWorker.h"
+#endif
 
 #if !HT_DEMO_MODE
 #include "TelemetryWorker.h"
@@ -74,6 +85,8 @@ static lv_obj_t *valueC = nullptr;
 static lv_obj_t *valueD = nullptr;
 static lv_obj_t *statusFoot = nullptr;
 static lv_obj_t *connectionLabel = nullptr;
+static lv_obj_t *chatMicLabel = nullptr;
+static lv_obj_t *chatMicBar = nullptr;
 static lv_obj_t *historyChart = nullptr;
 static lv_chart_series_t *historySeries = nullptr;
 static lv_obj_t *historyValue = nullptr;
@@ -326,48 +339,90 @@ static void buildSystemPage(lv_obj_t *p) {
   systemTouches = label(mem, "Touch-Aktionen: --", 11, 121, 278, MUTED);
 }
 
-// Chat UI shell only. There is intentionally NO input callback, message
-// buffer, chat transport, keyboard, Hermes API token or write endpoint here.
+// Chat UI shell: no message send callback, transport, keyboard or API key.
 static void buildChatPage(lv_obj_t *p) {
   label(p, "HERMES CHAT", 13, 12, 290, CYAN);
   label(p, "CHAT IST DEAKTIVIERT", 13, 36, 290, GREEN);
 
-  // Reserve a scrollable transcript surface for a future, separately
-  // authorized implementation. Never display fabricated messages.
   lv_obj_t *chatHistory = lv_obj_create(p);
   lv_obj_set_pos(chatHistory, 10, 64);
-  lv_obj_set_size(chatHistory, 300, 195);
+  lv_obj_set_size(chatHistory, 300, 155);
   lv_obj_set_style_radius(chatHistory, 12, 0);
   lv_obj_set_style_bg_color(chatHistory, lv_color_hex(CARD), 0);
   lv_obj_set_style_bg_opa(chatHistory, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(chatHistory, 0, 0);
   lv_obj_set_style_pad_all(chatHistory, 0, 0);
   lv_obj_set_scroll_dir(chatHistory, LV_DIR_VER);
+  label(chatHistory, "NOCH KEIN CHATVERLAUF", 13, 15, 270, FG);
+  label(chatHistory, "Nachrichten erscheinen hier erst", 13, 49, 270, MUTED);
+  label(chatHistory, "nach separater Freigabe.", 13, 72, 270, MUTED);
+  label(chatHistory, "Keine Agent-Befehle oder", 13, 102, 270, GREEN);
+  label(chatHistory, "Schreibzugriffe aktiviert.", 13, 125, 270, GREEN);
 
-  label(chatHistory, "NOCH KEIN CHATVERLAUF", 13, 17, 270, FG);
-  label(chatHistory, "Nachrichten erscheinen hier erst", 13, 52, 270, MUTED);
-  label(chatHistory, "nach separater Freigabe.", 13, 76, 270, MUTED);
-  label(chatHistory, "Keine Agent-Befehle oder", 13, 123, 270, GREEN);
-  label(chatHistory, "Schreibzugriffe aktiviert.", 13, 146, 270, GREEN);
+  // A relative level bar is the ONLY mic UI: no record or send control.
+  lv_obj_t *micCard = card(p, 10, 231, 300, 35);
+#if HT_MIC_TEST_ENABLED
+  chatMicLabel = label(micCard, "MIC: STARTET (lokal)", 8, 8, 166, MUTED);
+#else
+  chatMicLabel = label(micCard, "MIC: AUS (nur lokal)", 8, 8, 166, MUTED);
+#endif
+  chatMicBar = lv_bar_create(micCard);
+  lv_obj_set_pos(chatMicBar, 182, 10);
+  lv_obj_set_size(chatMicBar, 106, 15);
+  lv_bar_set_range(chatMicBar, 0, 100);
+  lv_bar_set_value(chatMicBar, 0, LV_ANIM_OFF);
+  lv_obj_set_style_bg_color(chatMicBar, lv_color_hex(0x20334C), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(chatMicBar, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(chatMicBar, lv_color_hex(GREEN), LV_PART_INDICATOR);
 
-  // Pure visual scaffold. The disabled text area cannot launch the LVGL
-  // on-screen keyboard and the send button has no click event handler.
+  // Disabled controls are deliberately styled to look disabled as well.
   lv_obj_t *chatInput = lv_textarea_create(p);
   lv_obj_set_pos(chatInput, 10, 273);
   lv_obj_set_size(chatInput, 215, 48);
   lv_textarea_set_one_line(chatInput, true);
   lv_textarea_set_placeholder_text(chatInput, "Nachricht (gesperrt)");
   lv_obj_add_state(chatInput, LV_STATE_DISABLED);
+  lv_obj_set_style_bg_color(chatInput, lv_color_hex(0x24374D),
+                            LV_PART_MAIN | LV_STATE_DISABLED);
+  lv_obj_set_style_bg_opa(chatInput, LV_OPA_COVER,
+                          LV_PART_MAIN | LV_STATE_DISABLED);
+  lv_obj_set_style_text_color(chatInput, lv_color_hex(MUTED),
+                              LV_PART_MAIN | LV_STATE_DISABLED);
+  lv_obj_set_style_border_width(chatInput, 0,
+                                LV_PART_MAIN | LV_STATE_DISABLED);
 
   lv_obj_t *chatSend = lv_btn_create(p);
   lv_obj_set_pos(chatSend, 233, 273);
   lv_obj_set_size(chatSend, 77, 48);
   styleButton(chatSend, 0x254A6D);
   lv_obj_add_state(chatSend, LV_STATE_DISABLED);
-  lv_obj_t *sendText = label(chatSend, "SENDEN", 0, 0, 68, FG);
+  lv_obj_set_style_bg_color(chatSend, lv_color_hex(0x20334C),
+                            LV_PART_MAIN | LV_STATE_DISABLED);
+  lv_obj_t *sendText = label(chatSend, "SENDEN", 0, 0, 68, MUTED);
   lv_obj_center(sendText);
 
   label(p, "NUR VORSCHAU / KEIN VERSAND", 13, 328, 290, MUTED);
+}
+
+// Read aggregate audio level only; always from the LVGL/main task.
+static void updateMicUi() {
+  if (chatMicLabel == nullptr || chatMicBar == nullptr) return;
+#if HT_MIC_TEST_ENABLED
+  MicLevelSnapshot mic;
+  if (!micLevelRead(mic)) return;
+  if (mic.failed) {
+    lv_label_set_text(chatMicLabel, "MIC: FEHLER (lokal)");
+    lv_bar_set_value(chatMicBar, 0, LV_ANIM_OFF);
+  } else if (mic.ready &&
+             (uint32_t)(millis() - mic.lastSampleMs) <= MIC_VALID_AGE_MS) {
+    lv_label_set_text_fmt(chatMicLabel, "MIC: %u %% (lokal)",
+                          (unsigned)mic.levelPercent);
+    lv_bar_set_value(chatMicBar, mic.levelPercent, LV_ANIM_OFF);
+  } else {
+    lv_label_set_text(chatMicLabel, "MIC: WARTE (lokal)");
+    lv_bar_set_value(chatMicBar, 0, LV_ANIM_OFF);
+  }
+#endif
 }
 
 static void buildUi() {
@@ -601,6 +656,11 @@ void setup() {
   if (!telemetryStarted)
     Serial.println("WARN: Hermes telemetry worker could not start");
 #endif
+#if HT_MIC_TEST_ENABLED
+  // Explicit opt-in only. No buffers or recordings leave the ESP32.
+  if (!micLevelStart())
+    Serial.println("WARN: local microphone level worker could not start");
+#endif
   sampleStatus();
   lastSampleMs = millis();
 }
@@ -611,6 +671,13 @@ void loop() {
   lv_tick_inc(now - lastTick);
   lastTick = now;
   lv_timer_handler();
+#if HT_MIC_TEST_ENABLED
+  static uint32_t lastMicUiMs = 0;
+  if ((uint32_t)(now - lastMicUiMs) >= 100) {
+    lastMicUiMs = now;
+    updateMicUi(); // only an aggregate read, never an I2S or HTTPS call
+  }
+#endif
 #if HT_DEMO_MODE
   if (requestSample || (uint32_t)(now - lastSampleMs) >= SAMPLE_MS) {
     requestSample = false;
