@@ -36,6 +36,9 @@ mkdir -p "$BUILD" "$LOG_DIR"
 chmod 700 "$BUILD" "$LOG_DIR"
 printf 'Compiling connected TLS firmware using the incremental Arduino build cache...\n'
 printf 'No passwords, tokens or private certificates will be printed.\n'
+# Capture inputs BEFORE and AFTER compilation; if someone edits a source
+# during the build, do not certify a potentially mixed-version binary.
+INPUT_HASH_BEFORE="$(python3 "$ROOT/scripts/pi/firmware-source-fingerprint.py")" || exit 1
 # A failed or interrupted build must invalidate the previous upload approval.
 rm -f -- "$MANIFEST"
 if arduino-cli compile --fqbn "$FQBN" \
@@ -46,8 +49,12 @@ if arduino-cli compile --fqbn "$FQBN" \
     printf 'REFUSED: Arduino CLI returned success without an application binary.\n' >&2
     exit 1
   fi
-  INPUT_HASH="$(python3 "$ROOT/scripts/pi/firmware-source-fingerprint.py")" || exit 1
-  printf '%s\n' "$INPUT_HASH" > "$MANIFEST.tmp"
+  INPUT_HASH_AFTER="$(python3 "$ROOT/scripts/pi/firmware-source-fingerprint.py")" || exit 1
+  if [[ "$INPUT_HASH_BEFORE" != "$INPUT_HASH_AFTER" ]]; then
+    printf 'REFUSED: firmware sources changed during compilation. Rebuild.\n' >&2
+    exit 1
+  fi
+  printf '%s\n' "$INPUT_HASH_AFTER" > "$MANIFEST.tmp"
   chmod 600 "$MANIFEST.tmp"
   mv -f -- "$MANIFEST.tmp" "$MANIFEST"
   printf 'CONNECTED COMPILE OK. Artifacts kept private in build/firmware-connected.\n'
