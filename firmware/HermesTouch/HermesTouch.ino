@@ -95,6 +95,7 @@ static uint32_t lastChartSequence = 0;
 static bool telemetryStarted = false;
 // GUI copy of the worker-reported minimum stack headroom in bytes.
 static uint32_t displayedWorkerStackFreeBytes = 0;
+static bool displayedWorkerStackObserved = false;
 #endif
 
 static void panelReset() {
@@ -383,7 +384,7 @@ static void updateLocalSystem() {
 #if HT_DEMO_MODE
   lv_label_set_text(systemStack, "TLS-Task: OFFLINE");
 #else
-  if (displayedWorkerStackFreeBytes > 0)
+  if (displayedWorkerStackObserved)
     lv_label_set_text_fmt(systemStack, "TLS-Stack min. frei: %lu B",
                           (unsigned long)displayedWorkerStackFreeBytes);
   else
@@ -441,6 +442,7 @@ static void sampleStatus() {
     latest = incoming;
     // Last seen worker stack watermark, independent of Pi/TLS availability.
     displayedWorkerStackFreeBytes = incoming.workerStackMinFreeBytes;
+    displayedWorkerStackObserved = true;
   }
   const uint32_t age = (uint32_t)(millis() - latest.lastSuccessMs);
   const bool fresh = latest.phase == TelemetryPhase::READY &&
