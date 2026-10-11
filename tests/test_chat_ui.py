@@ -10,7 +10,10 @@ ROOT = Path(__file__).resolve().parents[1]
 FIRMWARE = (ROOT / "firmware/HermesTouch/HermesTouch.ino").read_text(encoding="utf-8")
 WORKER = (ROOT / "firmware/HermesTouch/TelemetryWorker.h").read_text(encoding="utf-8")
 CHAT = FIRMWARE.split("static void buildChatPage(lv_obj_t *p) {", 1)[1].split(
-    "\nstatic void buildUi()", 1,
+    "\nstatic void buildVoicePage(", 1,
+)[0]
+VOICE = FIRMWARE.split("static void buildVoicePage(lv_obj_t *p) {", 1)[1].split(
+    "\n// Read aggregate audio level only;", 1,
 )[0]
 
 
@@ -39,37 +42,36 @@ class TestChatUiShell(unittest.TestCase):
         self.assertNotIn("lv_obj_add_event_cb(chatSend", CHAT)
         self.assertNotIn("lv_event_send(chatSend", CHAT)
 
-    def test_chat_all_widgets_fit_before_navigation(self):
-        # Page inner coordinate area: 320 x 352, bottom navigation follows.
+    def test_chat_all_widgets_fit_in_landscape(self):
+        # Layout on 480x320: page content y=80..319 with 240px height.
         for x, y, w, h in (
-            (10, 64, 300, 125),
-            (10, 194, 145, 39),
-            (10, 236, 300, 32),
-            (10, 273, 215, 48),
-            (233, 273, 77, 48),
+            (10, 67, 460, 78),
+            (10, 157, 348, 48),
+            (368, 157, 102, 48),
         ):
             with self.subTest(rect=(x, y, w, h)):
-                self.assertIn(f"lv_obj_set_pos(", CHAT)
-                self.assertLessEqual(x + w, 320)
-                self.assertLessEqual(y + h, 352)
-        self.assertIn("lv_obj_set_pos(chatHistory, 10, 64)", CHAT)
-        self.assertIn("lv_obj_set_size(chatHistory, 300, 125)", CHAT)
-        self.assertIn("lv_obj_t *micCard = card(p, 10, 236, 300, 32)", CHAT)
-        self.assertIn("lv_obj_set_pos(chatInput, 10, 273)", CHAT)
-        self.assertIn("lv_obj_set_pos(chatSend, 233, 273)", CHAT)
-        self.assertIn("lv_obj_set_size(chatSend, 77, 48)", CHAT)
+                self.assertLessEqual(x + w, 480)
+                self.assertLessEqual(y + h, 240)
+        self.assertIn("lv_obj_set_pos(chatHistory, 10, 67)", CHAT)
+        self.assertIn("lv_obj_set_size(chatHistory, 460, 78)", CHAT)
+        self.assertIn("lv_obj_set_pos(chatInput, 10, 157)", CHAT)
+        self.assertIn("lv_obj_set_pos(chatSend, 368, 157)", CHAT)
+        self.assertIn("lv_obj_set_size(chatSend, 102, 48)", CHAT)
 
     def test_composer_is_visually_disabled_not_white(self):
         self.assertIn("lv_obj_set_style_bg_color(chatInput, lv_color_hex(0x24374D)", CHAT)
         self.assertIn("LV_PART_MAIN | LV_STATE_DISABLED", CHAT)
         self.assertIn("lv_obj_set_style_bg_color(chatSend, lv_color_hex(0x20334C)", CHAT)
 
-    def test_microphone_meter_only_shows_local_aggregate(self):
-        self.assertIn("chatMicBar = lv_bar_create(micCard)", CHAT)
-        self.assertIn("lv_bar_set_range(chatMicBar, 0, 100)", CHAT)
-        self.assertIn('"MIC: AUS (nur lokal)"', CHAT)
-        self.assertIn('"MIC: STARTET (lokal)"', CHAT)
-        self.assertNotIn("micLevelI2S", CHAT)
+    def test_voice_meter_is_only_on_dedicated_voice_tab(self):
+        self.assertIn("chatMicBar = lv_bar_create(micCard)", VOICE)
+        self.assertIn("lv_bar_set_range(chatMicBar, 0, 100)", VOICE)
+        self.assertIn('"MIC: AUS (nur lokal)"', VOICE)
+        self.assertIn('"MIC: STARTET (lokal)"', VOICE)
+        self.assertNotIn("micLevelI2S", VOICE)
+        self.assertNotIn("chatMicBar", CHAT)
+        self.assertNotIn("onPttTouch", CHAT)
+        self.assertNotIn("chatSpeakerButton", CHAT)
 
     def test_no_new_network_write_surface(self):
         self.assertIn('urlBase + "/v1/status"', WORKER)
