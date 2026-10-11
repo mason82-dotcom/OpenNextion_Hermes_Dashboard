@@ -61,6 +61,8 @@ class SpeakerOutputContracts(unittest.TestCase):
         self.assertIn("expanderSetPin(PCF8574_PIN_LCD_RST, true)", FIRMWARE)
         self.assertIn("expanderSetPin(PCF8574_PIN_I2S_CTRL, enabled)", FIRMWARE)
         self.assertIn("speakerAmpSet(false)", FIRMWARE)
+        self.assertIn('expanderAvailable ? "SPK: FEHLER" : "SPK: PCF FEHLT"', FIRMWARE)
+        self.assertIn("speakerToneStartFailed = true", FIRMWARE)
 
     def test_expander_owned_by_main_loop_no_worker_wire_or_lvgl(self):
         self.assertIn("static void updateSpeakerUi()", FIRMWARE)
