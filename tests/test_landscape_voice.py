@@ -1,8 +1,8 @@
 """v0.8.4: physical 480x320 landscape, separate speech tab and bounded
 local speaker test, including actual native C++ touch and PCM math tests.
 
-Source-contract tests do NOT certify physical CST826 touch orientation:
-that requires a deliberate hardware flash and corner-button trial.
+The T1 mapping follows user-reported corner raw-coordinate measurements.
+Source-contract tests still do NOT replace physical button verification.
 """
 from pathlib import Path
 import shutil
@@ -42,8 +42,9 @@ class LandscapeAndVoiceTab(unittest.TestCase):
         self.assertIn('#include "LandscapeTouch.h"', FIRMWARE)
         self.assertIn('mapNativeTouchToLandscape(', FIRMWARE)
         self.assertIn('point.x, point.y, LCD_H_RES, LCD_V_RES', FIRMWARE)
-        self.assertIn('nativeHeight - 1 - py', TOUCH)
-        self.assertIn('static_cast<int16_t>(px)', TOUCH)
+        self.assertIn('static_cast<int16_t>(py)', TOUCH)
+        self.assertIn('nativeWidth - 1 - px', TOUCH)
+        self.assertIn('static uint8_t touchCalibProfile = 1', FIRMWARE)
 
     def test_five_distinct_landscape_tabs(self):
         self.assertIn('PAGE_COUNT = 5', FIRMWARE)
@@ -132,15 +133,20 @@ class LandscapeAndVoiceTab(unittest.TestCase):
 #include "SpeakerPcmTest.h"
 int main() {
   auto p = mapNativeTouchToLandscape(0,0);
-  assert(p.x == 479 && p.y == 0);
-  p = mapNativeTouchToLandscape(319,0);
-  assert(p.x == 479 && p.y == 319);
-  p = mapNativeTouchToLandscape(0,479);
-  assert(p.x == 0 && p.y == 0);
-  p = mapNativeTouchToLandscape(319,479);
   assert(p.x == 0 && p.y == 319);
-  p = mapNativeTouchToLandscape(-900,900);
+  p = mapNativeTouchToLandscape(319,0);
   assert(p.x == 0 && p.y == 0);
+  p = mapNativeTouchToLandscape(0,479);
+  assert(p.x == 479 && p.y == 319);
+  p = mapNativeTouchToLandscape(319,479);
+  assert(p.x == 479 && p.y == 0);
+  p = mapNativeTouchToLandscape(-900,900);
+  assert(p.x == 479 && p.y == 319);
+  // Real user measurements: T0 was diagonal, T1 maps corners correctly.
+  p = mapNativeTouchToLandscape(319,31);
+  assert(p.x == 31 && p.y == 0);
+  p = mapNativeTouchToLandscape(12,462);
+  assert(p.x == 462 && p.y == 307);
 
   assert(speakerClampLevel(-1) == 0);
   assert(speakerClampLevel(0) == 0);
