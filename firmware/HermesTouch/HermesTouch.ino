@@ -37,6 +37,18 @@
 #include "MicLevelWorker.h"
 #endif
 
+// Speaker output is an independent, deliberate LOCAL opt-in.
+// It cannot play captured PCM, only a fixed, quiet 250ms test tone.
+#ifndef HT_SPEAKER_TEST_ENABLED
+#define HT_SPEAKER_TEST_ENABLED 0
+#endif
+#if HT_SPEAKER_TEST_ENABLED != 0 && HT_SPEAKER_TEST_ENABLED != 1
+#error "HT_SPEAKER_TEST_ENABLED must be 0 or 1"
+#endif
+#if HT_SPEAKER_TEST_ENABLED
+#include "SpeakerToneWorker.h"
+#endif
+
 #if !HT_DEMO_MODE
 #include "TelemetryWorker.h"
 #ifndef HT_WIFI_SSID
@@ -71,6 +83,13 @@ Arduino_GFX *gfx = new Arduino_ST7796(
     bus, GFX_NOT_DEFINED, 0, false, LCD_H_RES, LCD_V_RES);
 Adafruit_CST8XX touch;
 Adafruit_PCF8574 expander;
+// The PCF8574 writes the complete 8-bit GPIO byte on every operation.
+// Only the GUI/setup task owns this state, including LCD reset and NS4168 amp.
+static bool expanderAvailable = false;
+static uint8_t expanderShadow = 0xFF;
+#if HT_SPEAKER_TEST_ENABLED
+static bool speakerAmpOn = false;
+#endif
 static lv_disp_draw_buf_t drawBuf;
 static lv_disp_drv_t dispDrv;
 static lv_color_t dispBuf[LCD_H_RES * BUF_LINES];
@@ -94,6 +113,8 @@ static lv_obj_t *chatDiagPcm = nullptr;
 static lv_obj_t *chatDiagRate = nullptr;
 static lv_obj_t *chatDiagRms = nullptr;
 static lv_obj_t *chatDiagPsram = nullptr;
+static lv_obj_t *chatSpeakerButton = nullptr;
+static lv_obj_t *chatSpeakerStatus = nullptr;
 static lv_obj_t *historyChart = nullptr;
 static lv_chart_series_t *historySeries = nullptr;
 static lv_obj_t *historyValue = nullptr;
@@ -118,18 +139,38 @@ static uint32_t displayedWorkerStackFreeBytes = 0;
 static bool displayedWorkerStackObserved = false;
 #endif
 
+static void expanderSetPin(uint8_t pin, bool high) {
+  if (!expanderAvailable) return;
+  if (high) expanderShadow |= (uint8_t)(1U << pin);
+  else expanderShadow &= (uint8_t)~(1U << pin);
+  expander.digitalWriteByte(expanderShadow);
+}
+
 static void panelReset() {
   if (!expander.begin(PCF8574_ADDR, &Wire)) {
     Serial.println("WARN: PCF8574 not found");
     return;
   }
-  expander.digitalWriteByte(0xFF);
+  expanderAvailable = true;
+  // Speaker must always boot muted: PCF8574 P0 LOW = NS4168 disabled.
+  // Keep LCD_RST (P6) independent; never toggle amplifier via reset writes.
+  expanderShadow = (uint8_t)(0xFF & ~(1U << PCF8574_PIN_I2S_CTRL));
+  expander.digitalWriteByte(expanderShadow);
   delay(20);
-  expander.digitalWriteByte((uint8_t)(0xFF & ~(1 << PCF8574_PIN_LCD_RST)));
+  expanderSetPin(PCF8574_PIN_LCD_RST, false);
   delay(120);
-  expander.digitalWriteByte(0xFF);
+  expanderSetPin(PCF8574_PIN_LCD_RST, true);
   delay(120);
 }
+
+#if HT_SPEAKER_TEST_ENABLED
+static void speakerAmpSet(bool enabled) {
+  if (!expanderAvailable) return;
+  if (speakerAmpOn == enabled) return;
+  expanderSetPin(PCF8574_PIN_I2S_CTRL, enabled);
+  speakerAmpOn = enabled;
+}
+#endif
 
 static void flush(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *p) {
   uint32_t w = area->x2 - area->x1 + 1;
@@ -227,6 +268,16 @@ static void onPttTouch(lv_event_t *event) {
   } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
     micPttSetHeld(false);
   }
+#else
+  (void)event;
+#endif
+}
+
+static void onSpeakerTest(lv_event_t *event) {
+#if HT_SPEAKER_TEST_ENABLED
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+  ++touchActions;
+  (void)speakerToneRequest(); // local, fixed waveform; no network
 #else
   (void)event;
 #endif
@@ -391,10 +442,24 @@ static void buildChatPage(lv_obj_t *p) {
 #else
   label(chatHistory, "MIC/PTT: AUS (lokal)", 13, 48, 270, MUTED);
 #endif
-  label(chatHistory, "NOCH KEIN CHATVERLAUF", 13, 137, 270, FG);
-  label(chatHistory, "Nachrichten nur nach Freigabe", 13, 165, 270, MUTED);
-  label(chatHistory, "Keine Agent-Befehle oder", 13, 190, 270, GREEN);
-  label(chatHistory, "Schreibzugriffe aktiviert.", 13, 213, 270, GREEN);
+  // Scroll down below microphone diagnostics for the independent speaker test.
+  chatSpeakerButton = lv_btn_create(chatHistory);
+  lv_obj_set_pos(chatSpeakerButton, 13, 137);
+  lv_obj_set_size(chatSpeakerButton, 135, 40);
+  styleButton(chatSpeakerButton, 0x176A98);
+#if HT_SPEAKER_TEST_ENABLED
+  lv_obj_add_event_cb(chatSpeakerButton, onSpeakerTest, LV_EVENT_CLICKED, nullptr);
+  chatSpeakerStatus = label(chatHistory, "SPK: STARTET", 155, 149, 127, MUTED);
+#else
+  lv_obj_add_state(chatSpeakerButton, LV_STATE_DISABLED);
+  chatSpeakerStatus = label(chatHistory, "SPK: AUS", 155, 149, 127, MUTED);
+#endif
+  lv_obj_t *speakerText = label(chatSpeakerButton, "TESTTON", 0, 0, 114, FG);
+  lv_obj_center(speakerText);
+  label(chatHistory, "NOCH KEIN CHATVERLAUF", 13, 197, 270, FG);
+  label(chatHistory, "Nachrichten nur nach Freigabe", 13, 225, 270, MUTED);
+  label(chatHistory, "Keine Agent-Befehle oder", 13, 250, 270, GREEN);
+  label(chatHistory, "Schreibzugriffe aktiviert.", 13, 273, 270, GREEN);
 
   // Local-only PTT. LVGL sets an atomic pressed flag, never handles audio.
   // Neither the button nor the disabled chat composer can send messages.
@@ -558,6 +623,52 @@ static void updateMicUi() {
   } else {
     lv_label_set_text(chatMicLabel, "MIC: WARTE (lokal)");
     lv_bar_set_value(chatMicBar, 0, LV_ANIM_OFF);
+  }
+#endif
+}
+
+// Driven on the main/LVGL task. I2S writes are confined to the worker;
+// the PCF8574 I2C amp-enable pin is never toggled by a FreeRTOS worker.
+static void updateSpeakerUi() {
+#if HT_SPEAKER_TEST_ENABLED
+  SpeakerToneSnapshot output;
+  if (!speakerToneRead(output)) return;
+  // Force mute on startup, completion, errors or loss of the output worker.
+  const bool desiredAmp =
+      output.phase == SpeakerTonePhase::WAIT_AMP ||
+      output.phase == SpeakerTonePhase::PLAYING;
+  if (desiredAmp && expanderAvailable) {
+    speakerAmpSet(true);
+    speakerToneAmpAcknowledged(true);
+  } else {
+    speakerAmpSet(false);
+    speakerToneAmpAcknowledged(false);
+  }
+  if (chatSpeakerStatus == nullptr) return;
+  switch (output.phase) {
+    case SpeakerTonePhase::READY:
+      lv_label_set_text(chatSpeakerStatus, "SPK: BEREIT");
+      break;
+    case SpeakerTonePhase::QUEUED:
+    case SpeakerTonePhase::WAIT_AMP:
+      lv_label_set_text(chatSpeakerStatus, "SPK: STARTET");
+      break;
+    case SpeakerTonePhase::PLAYING:
+      lv_label_set_text(chatSpeakerStatus, "SPK: TON");
+      break;
+    case SpeakerTonePhase::WAIT_MUTE:
+      lv_label_set_text(chatSpeakerStatus, "SPK: STOPPT");
+      break;
+    case SpeakerTonePhase::DONE:
+      lv_label_set_text_fmt(chatSpeakerStatus, "SPK: OK %lu",
+          (unsigned long)output.completed);
+      break;
+    case SpeakerTonePhase::ERROR:
+      lv_label_set_text(chatSpeakerStatus, "SPK: FEHLER");
+      break;
+    default:
+      lv_label_set_text(chatSpeakerStatus, "SPK: STARTET");
+      break;
   }
 #endif
 }
@@ -798,6 +909,11 @@ void setup() {
   if (!micLevelStart())
     Serial.println("WARN: local microphone level worker could not start");
 #endif
+#if HT_SPEAKER_TEST_ENABLED
+  // Separate I2S1 speaker output task. No amplifier when expander is missing.
+  if (expanderAvailable && !speakerToneStart())
+    Serial.println("WARN: local speaker tone worker could not start");
+#endif
   sampleStatus();
   lastSampleMs = millis();
 }
@@ -813,6 +929,13 @@ void loop() {
   if ((uint32_t)(now - lastMicUiMs) >= 100) {
     lastMicUiMs = now;
     updateMicUi(); // only an aggregate read, never an I2S or HTTPS call
+  }
+#endif
+#if HT_SPEAKER_TEST_ENABLED
+  static uint32_t lastSpeakerUiMs = 0;
+  if ((uint32_t)(now - lastSpeakerUiMs) >= 20) {
+    lastSpeakerUiMs = now;
+    updateSpeakerUi(); // amp via main thread; worker handles I2S1 TX
   }
 #endif
 #if HT_DEMO_MODE
