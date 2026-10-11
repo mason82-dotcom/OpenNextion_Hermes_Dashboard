@@ -8,6 +8,7 @@
 #include <ESP_I2S.h>
 #include <esp_heap_caps.h>
 #include <atomic>
+#include <cstring>
 #include <math.h>
 #include "BoardConfig.h"
 
@@ -79,6 +80,7 @@ static void micLevelTask(void *) {
                         I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO)) {
     MicLevelSnapshot failed;
     failed.failed = true;
+    failed.pttPhase = MicPttPhase::ERROR;
     micLevelPublish(failed);
     micLevelI2S.end();
     vTaskDelete(nullptr);
