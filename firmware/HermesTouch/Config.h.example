@@ -10,3 +10,7 @@
 
 // Requires locally generated LocalCa.h with the public CA PEM.
 // HTTPS only; firmware rejects HTTP and missing/invalid CA/NTP time.
+
+// Optional, LOCAL-ONLY Dual MIC Board VU test. 0 = default OFF.
+// Enable only deliberately in the private Config.h; no PCM storage or sending.
+#define HT_MIC_TEST_ENABLED 0
