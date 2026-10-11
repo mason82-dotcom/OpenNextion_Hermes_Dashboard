@@ -1,4 +1,4 @@
-/* Hermes Touch v0.8.2 (candidate) - LOCAL-ONLY push-to-talk prototype.
+/* Hermes Touch v0.8.3 (candidate) - LOCAL-ONLY PTT PCM diagnostics.
  * Hardware: OpenNextion ONX3248G035 / ESP32-S3.
  * Default build has no Config.h -> NO WIFI, NO DEVICE TOKEN, NO API ACCESS.
  * Status and history explicitly distinguish local ESP32 demo values from Pi data.
@@ -89,6 +89,11 @@ static lv_obj_t *chatMicLabel = nullptr;
 static lv_obj_t *chatMicBar = nullptr;
 static lv_obj_t *chatPttButton = nullptr;
 static lv_obj_t *chatPttStatus = nullptr;
+static lv_obj_t *chatPttProgress = nullptr;
+static lv_obj_t *chatDiagPcm = nullptr;
+static lv_obj_t *chatDiagRate = nullptr;
+static lv_obj_t *chatDiagRms = nullptr;
+static lv_obj_t *chatDiagPsram = nullptr;
 static lv_obj_t *historyChart = nullptr;
 static lv_chart_series_t *historySeries = nullptr;
 static lv_obj_t *historyValue = nullptr;
@@ -375,11 +380,21 @@ static void buildChatPage(lv_obj_t *p) {
   lv_obj_set_style_border_width(chatHistory, 0, 0);
   lv_obj_set_style_pad_all(chatHistory, 0, 0);
   lv_obj_set_scroll_dir(chatHistory, LV_DIR_VER);
-  // All four text lines fit inside this compact 125px transcript preview.
-  label(chatHistory, "NOCH KEIN CHATVERLAUF", 13, 10, 270, FG);
-  label(chatHistory, "Nachrichten nur nach Freigabe", 13, 40, 270, MUTED);
-  label(chatHistory, "Keine Agent-Befehle oder", 13, 71, 270, GREEN);
-  label(chatHistory, "Schreibzugriffe aktiviert.", 13, 95, 270, GREEN);
+  // The scrollable (still empty) chat shell also hosts read-only, local
+  // aggregate PCM diagnostics. Scroll down for the unchanged chat notice.
+  label(chatHistory, "LOKALE AUDIO-DIAGNOSE", 13, 5, 270, CYAN);
+#if HT_MIC_TEST_ENABLED
+  chatDiagPcm = label(chatHistory, "PCM: -- | --.-s", 13, 30, 275, MUTED);
+  chatDiagRate = label(chatHistory, "Rate: --/s | Anteil: --%", 13, 52, 275, MUTED);
+  chatDiagRms = label(chatHistory, "RMS: -- Peak: -- Clip: --%", 13, 74, 275, MUTED);
+  chatDiagPsram = label(chatHistory, "PSRAM KB: -- / -- / --", 13, 96, 275, MUTED);
+#else
+  label(chatHistory, "MIC/PTT: AUS (lokal)", 13, 48, 270, MUTED);
+#endif
+  label(chatHistory, "NOCH KEIN CHATVERLAUF", 13, 137, 270, FG);
+  label(chatHistory, "Nachrichten nur nach Freigabe", 13, 165, 270, MUTED);
+  label(chatHistory, "Keine Agent-Befehle oder", 13, 190, 270, GREEN);
+  label(chatHistory, "Schreibzugriffe aktiviert.", 13, 213, 270, GREEN);
 
   // Local-only PTT. LVGL sets an atomic pressed flag, never handles audio.
   // Neither the button nor the disabled chat composer can send messages.
@@ -400,6 +415,13 @@ static void buildChatPage(lv_obj_t *p) {
 #endif
   lv_obj_t *pttText = label(chatPttButton, "HALTEN: TEST", 0, 0, 134, FG);
   lv_obj_center(pttText);
+  chatPttProgress = lv_bar_create(chatPttButton);
+  lv_obj_set_pos(chatPttProgress, 8, 32);
+  lv_obj_set_size(chatPttProgress, 129, 4);
+  lv_bar_set_range(chatPttProgress, 0, 4000);
+  lv_bar_set_value(chatPttProgress, 0, LV_ANIM_OFF);
+  lv_obj_set_style_bg_color(chatPttProgress, lv_color_hex(0x20334C), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(chatPttProgress, lv_color_hex(GREEN), LV_PART_INDICATOR);
 
   lv_obj_t *micCard = card(p, 10, 236, 300, 32);
 #if HT_MIC_TEST_ENABLED
@@ -451,6 +473,56 @@ static void updateMicUi() {
 #if HT_MIC_TEST_ENABLED
   MicLevelSnapshot mic;
   if (!micLevelRead(mic)) return;
+
+  // Entire diagnostic panel is rendered from a snapshot copied on the GUI
+  // task. No raw PCM or PSRAM pointer is ever visible to LVGL.
+  if (chatPttProgress != nullptr) {
+    const uint32_t elapsed = mic.pttDurationMs > MIC_PTT_MAX_MS
+                                  ? MIC_PTT_MAX_MS : mic.pttDurationMs;
+    lv_bar_set_value(chatPttProgress,
+                     mic.pttPhase == MicPttPhase::RECORDING ||
+                     mic.pttPhase == MicPttPhase::TIMEOUT ? elapsed : 0,
+                     LV_ANIM_OFF);
+  }
+  if (chatDiagPcm != nullptr) {
+    if (mic.pttPhase == MicPttPhase::ERROR ||
+        mic.pttPhase == MicPttPhase::NO_PSRAM) {
+      lv_label_set_text(chatDiagPcm, "PCM: FEHLER / KEIN PUFFER");
+      lv_label_set_text(chatDiagRate, "Rate: --/s | Anteil: --%");
+      lv_label_set_text(chatDiagRms, "RMS: -- Peak: -- Clip: --%");
+      lv_label_set_text(chatDiagPsram, "PSRAM KB: -- / -- / --");
+    } else {
+      lv_label_set_text_fmt(chatDiagPcm, "PCM: %lu | %lu.%lus",
+          (unsigned long)mic.pttSamples,
+          (unsigned long)(mic.pttDurationMs / 1000),
+          (unsigned long)((mic.pttDurationMs / 100) % 10));
+      if (mic.pttDurationMs >= 200) {
+        lv_label_set_text_fmt(chatDiagRate, "Rate: %lu/s | Anteil: %u%%",
+            (unsigned long)mic.pttRateHz, (unsigned)mic.pttCoveragePct);
+      } else {
+        lv_label_set_text(chatDiagRate, "Rate: --/s | Anteil: --%");
+      }
+      lv_label_set_text_fmt(chatDiagRms, "RMS: %u Peak: %u Clip: %u%%",
+          (unsigned)mic.pttRms, (unsigned)mic.pttPeak,
+          (unsigned)mic.pttClipPct);
+      if (mic.pttMemoryValid) {
+        if (mic.pttPhase == MicPttPhase::RECORDING) {
+          lv_label_set_text_fmt(chatDiagPsram,
+              "PSRAM KB: %lu / %lu / --",
+              (unsigned long)mic.pttPsramBeforeKB,
+              (unsigned long)mic.pttPsramMinKB);
+        } else {
+          lv_label_set_text_fmt(chatDiagPsram,
+              "PSRAM KB: %lu / %lu / %lu",
+              (unsigned long)mic.pttPsramBeforeKB,
+              (unsigned long)mic.pttPsramMinKB,
+              (unsigned long)mic.pttPsramAfterKB);
+        }
+      } else {
+        lv_label_set_text(chatDiagPsram, "PSRAM KB: -- / -- / --");
+      }
+    }
+  }
   if (chatPttStatus != nullptr) {
     switch (mic.pttPhase) {
       case MicPttPhase::RECORDING:
@@ -496,7 +568,7 @@ static void buildUi() {
   lv_obj_set_style_bg_color(screen, lv_color_hex(BG), 0);
   lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
   label(screen, "HERMES TOUCH", 13, 10, 200, CYAN);
-  label(screen, "v0.8.2 | ONX3248G035", 13, 35, 280, MUTED);
+  label(screen, "v0.8.3 | ONX3248G035", 13, 35, 280, MUTED);
 #if !HT_DEMO_MODE
   connectionLabel = label(screen, "WLAN --", 219, 12, 97, MUTED);
 #endif
@@ -714,7 +786,7 @@ void setup() {
   buildUi();
 
 #if HT_DEMO_MODE
-  Serial.println("HERMES TOUCH v0.8.2 OFFLINE: NO WIFI / NO API / READ-ONLY");
+  Serial.println("HERMES TOUCH v0.8.3 OFFLINE: NO WIFI / NO API / READ-ONLY");
 #else
   // Creates a separate FreeRTOS network worker; LVGL never waits for HTTPS.
   telemetryStarted = telemetryStart();
