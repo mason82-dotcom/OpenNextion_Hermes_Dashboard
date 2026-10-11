@@ -116,6 +116,14 @@ bash scripts/pi/firmware-build-connected.sh
 # Kein automatischer Flash-Vorgang.
 ```
 
+## v0.7.1: geprüfte Firmware-Eingaben und ablaufende Healthchecks
+
+**Zwei gezielte Korrekturen – Pi-Test steht noch aus.** Das manuelle Connected-Upload-Skript prüft jetzt einen in `build/firmware-connected/` gespeicherten SHA-256-Fingerabdruck aller relevanten lokalen Sketch-Dateien, einschließlich `TelemetryWorker.h` und privater Konfigurationsdateien. Veraltete Build-Artefakte werden verweigert, auch wenn Datei-Zeitstempel unverändert geblieben sind. Erst ein neuer erfolgreicher **inkrementeller** Connected-Build erzeugt die Freigabe.
+
+Die Pi-Bridge markiert gecachte Hermes-Healthchecks nach **45 Sekunden ohne vollständigen neuen Prüfzyklus** als veraltet; API-/Gateway-Status wird dann nicht als gesund bzw. aktiv ausgegeben. Die HTTPS-Smokediagnose zeigt das Alter des Healthcheck-Caches. Die ESP32-Firmware selbst wurde dafür **nicht** geändert.
+
+[**Korrekturen, Tests und sichere Aktivierung auf dem Pi**](docs/V0.7.1-FIXES.md)
+
 ## 30-Minuten-Stabilitätstest für v0.7 (kein Flashen)
 
 Nach dem bestätigten TLS-Ausfall- und Wiederherstellungstest kann die Pi-Seite mit einem **lokalen, lesenden HTTPS-Monitor** über 30 Minuten geprüft werden. Das Tool zeichnet Antwortzeiten, Ausfälle und ausgewählte Pi-Messwerte im ignorierten `build/stability/`-Verzeichnis auf. Ergänzend müssen die ESP32-Heap- und PSRAM-Werte am Anfang und am Ende direkt auf der SYSTEM-Seite verglichen werden – der Pi-Monitor kann diese nicht auslesen.
