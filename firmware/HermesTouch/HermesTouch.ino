@@ -1,4 +1,4 @@
-/* Hermes Touch v0.8.1 (candidate) - read-only PDM microphone level test.
+/* Hermes Touch v0.8.2 (candidate) - LOCAL-ONLY push-to-talk prototype.
  * Hardware: OpenNextion ONX3248G035 / ESP32-S3.
  * Default build has no Config.h -> NO WIFI, NO DEVICE TOKEN, NO API ACCESS.
  * Status and history explicitly distinguish local ESP32 demo values from Pi data.
@@ -87,6 +87,8 @@ static lv_obj_t *statusFoot = nullptr;
 static lv_obj_t *connectionLabel = nullptr;
 static lv_obj_t *chatMicLabel = nullptr;
 static lv_obj_t *chatMicBar = nullptr;
+static lv_obj_t *chatPttButton = nullptr;
+static lv_obj_t *chatPttStatus = nullptr;
 static lv_obj_t *historyChart = nullptr;
 static lv_chart_series_t *historySeries = nullptr;
 static lv_obj_t *historyValue = nullptr;
@@ -184,6 +186,10 @@ static void styleButton(lv_obj_t *btn, uint32_t bg) {
 
 static void showPage(int page) {
   if (page < 0 || page >= PAGE_COUNT) return;
+#if HT_MIC_TEST_ENABLED
+  // Leaving CHAT is another independent stop trigger for raw PTT capture.
+  if (page != 3) micPttSetHeld(false);
+#endif
   activePage = page;
   for (int i = 0; i < PAGE_COUNT; ++i) {
     if (i == page) lv_obj_clear_flag(pages[i], LV_OBJ_FLAG_HIDDEN);
@@ -203,6 +209,20 @@ static void onNav(lv_event_t *event) {
       return;
     }
   }
+}
+
+static void onPttTouch(lv_event_t *event) {
+#if HT_MIC_TEST_ENABLED
+  const lv_event_code_t code = lv_event_get_code(event);
+  if (code == LV_EVENT_PRESSED && activePage == 3) {
+    ++touchActions;
+    micPttSetHeld(true);
+  } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+    micPttSetHeld(false);
+  }
+#else
+  (void)event;
+#endif
 }
 
 static void onRefresh(lv_event_t *event) {
@@ -346,7 +366,7 @@ static void buildChatPage(lv_obj_t *p) {
 
   lv_obj_t *chatHistory = lv_obj_create(p);
   lv_obj_set_pos(chatHistory, 10, 64);
-  lv_obj_set_size(chatHistory, 300, 155);
+  lv_obj_set_size(chatHistory, 300, 125);
   lv_obj_set_style_radius(chatHistory, 12, 0);
   lv_obj_set_style_bg_color(chatHistory, lv_color_hex(CARD), 0);
   lv_obj_set_style_bg_opa(chatHistory, LV_OPA_COVER, 0);
@@ -359,16 +379,31 @@ static void buildChatPage(lv_obj_t *p) {
   label(chatHistory, "Keine Agent-Befehle oder", 13, 102, 270, GREEN);
   label(chatHistory, "Schreibzugriffe aktiviert.", 13, 125, 270, GREEN);
 
-  // A relative level bar is the ONLY mic UI: no record or send control.
-  lv_obj_t *micCard = card(p, 10, 231, 300, 35);
+  // Local-only PTT. LVGL sets an atomic pressed flag, never handles audio.
+  // Neither the button nor the disabled chat composer can send messages.
+  chatPttButton = lv_btn_create(p);
+  lv_obj_set_pos(chatPttButton, 10, 194);
+  lv_obj_set_size(chatPttButton, 145, 39);
+  styleButton(chatPttButton, 0x157EAD);
 #if HT_MIC_TEST_ENABLED
-  chatMicLabel = label(micCard, "MIC: STARTET (lokal)", 8, 8, 166, MUTED);
+  lv_obj_add_event_cb(chatPttButton, onPttTouch, LV_EVENT_ALL, nullptr);
+  chatPttStatus = label(p, "PTT: BEREIT", 165, 204, 145, MUTED);
 #else
-  chatMicLabel = label(micCard, "MIC: AUS (nur lokal)", 8, 8, 166, MUTED);
+  lv_obj_add_state(chatPttButton, LV_STATE_DISABLED);
+  chatPttStatus = label(p, "PTT: AUS", 165, 204, 145, MUTED);
+#endif
+  lv_obj_t *pttText = label(chatPttButton, "HALTEN: TEST", 0, 0, 134, FG);
+  lv_obj_center(pttText);
+
+  lv_obj_t *micCard = card(p, 10, 236, 300, 32);
+#if HT_MIC_TEST_ENABLED
+  chatMicLabel = label(micCard, "MIC: STARTET (lokal)", 8, 5, 166, MUTED);
+#else
+  chatMicLabel = label(micCard, "MIC: AUS (nur lokal)", 8, 5, 166, MUTED);
 #endif
   chatMicBar = lv_bar_create(micCard);
-  lv_obj_set_pos(chatMicBar, 182, 10);
-  lv_obj_set_size(chatMicBar, 106, 15);
+  lv_obj_set_pos(chatMicBar, 182, 9);
+  lv_obj_set_size(chatMicBar, 106, 14);
   lv_bar_set_range(chatMicBar, 0, 100);
   lv_bar_set_value(chatMicBar, 0, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(chatMicBar, lv_color_hex(0x20334C), LV_PART_MAIN);
@@ -410,6 +445,30 @@ static void updateMicUi() {
 #if HT_MIC_TEST_ENABLED
   MicLevelSnapshot mic;
   if (!micLevelRead(mic)) return;
+  if (chatPttStatus != nullptr) {
+    switch (mic.pttPhase) {
+      case MicPttPhase::RECORDING:
+        lv_label_set_text_fmt(chatPttStatus, "TEST: %lu.%lu/4s",
+            (unsigned long)(mic.pttDurationMs / 1000),
+            (unsigned long)((mic.pttDurationMs / 100) % 10));
+        break;
+      case MicPttPhase::DISCARDED:
+        lv_label_set_text(chatPttStatus, "PTT: VERWORFEN");
+        break;
+      case MicPttPhase::TIMEOUT:
+        lv_label_set_text(chatPttStatus, "PTT: LIMIT 4s");
+        break;
+      case MicPttPhase::NO_PSRAM:
+        lv_label_set_text(chatPttStatus, "PTT: RAM FEHLT");
+        break;
+      case MicPttPhase::ERROR:
+        lv_label_set_text(chatPttStatus, "PTT: FEHLER");
+        break;
+      default:
+        lv_label_set_text(chatPttStatus, "PTT: BEREIT");
+        break;
+    }
+  }
   if (mic.failed) {
     lv_label_set_text(chatMicLabel, "MIC: FEHLER (lokal)");
     lv_bar_set_value(chatMicBar, 0, LV_ANIM_OFF);
@@ -431,7 +490,7 @@ static void buildUi() {
   lv_obj_set_style_bg_color(screen, lv_color_hex(BG), 0);
   lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
   label(screen, "HERMES TOUCH", 13, 10, 200, CYAN);
-  label(screen, "v0.8.1 | ONX3248G035", 13, 35, 280, MUTED);
+  label(screen, "v0.8.2 | ONX3248G035", 13, 35, 280, MUTED);
 #if !HT_DEMO_MODE
   connectionLabel = label(screen, "WLAN --", 219, 12, 97, MUTED);
 #endif
@@ -649,7 +708,7 @@ void setup() {
   buildUi();
 
 #if HT_DEMO_MODE
-  Serial.println("HERMES TOUCH v0.8.1 OFFLINE: NO WIFI / NO API / READ-ONLY");
+  Serial.println("HERMES TOUCH v0.8.2 OFFLINE: NO WIFI / NO API / READ-ONLY");
 #else
   // Creates a separate FreeRTOS network worker; LVGL never waits for HTTPS.
   telemetryStarted = telemetryStart();
